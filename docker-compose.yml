@@ -1,6 +1,24 @@
+# このファイルは開発専用です。本番イメージは backend/Dockerfile を単体でビルドしてください
+# （本ファイルは参照しません）: docker build -t task-management-backend ./backend
+#
+# 起動: docker compose up --build
+# ソースの変更は Gradle の継続ビルド(--continuous)が検知して自動で再コンパイルし、
+# それを Spring Boot DevTools が検知してアプリを高速に再起動します（コンテナは再起動しません）。
 services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile.dev
     ports:
       - "8080:8080"
+      - "35729:35729" # Spring Boot DevTools の LiveReload（対応ブラウザ拡張と併用する場合に使用）
+    volumes:
+      - ./backend:/workspace
+      - gradle-home:/root/.gradle # 依存(jar)キャッシュを永続化し、再起動のたびのDLを防ぐ
+      - gradle-project-cache:/workspace/.gradle # プロジェクトのビルドキャッシュを永続化
+      - build-output:/workspace/build # ビルド成果物(root所有)をホスト側に書き出さない
+
+volumes:
+  gradle-home:
+  gradle-project-cache:
+  build-output:
