@@ -65,6 +65,8 @@
 - Bean Validation（入力値の検証）
 - ESLint / Prettier（フロントエンドのコード整形・静的解析）
 
+> **現時点のスキーマ管理方式**: Flyway導入前の現段階では、JPAエンティティ（[7章](./04-data-model.md#7-データモデル)のBOARD/CARD/LABEL/CARD_LABEL）を唯一の情報源とし、`spring.jpa.hibernate.ddl-auto=update` でHibernateに開発DBのスキーマを自動生成させています。本番でこの値（`update`）を使うのは意図せぬスキーマ変更の危険があるため非推奨で、Flyway導入時にSQLファイルでスキーマをバージョン管理する方式へ置き換える想定です。
+
 ---
 
 ## 10. 今後の拡張ロードマップ
