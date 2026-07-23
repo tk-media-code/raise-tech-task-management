@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# 環境変数（DB認証情報など）。雛形の .env.example だけをコミットする
+.env
