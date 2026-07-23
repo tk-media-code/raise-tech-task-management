@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>タスク管理アプリ（プロトタイプ）</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ ヘッダー（常時表示） ============ -->
+  <header class="app-header">
+    <div class="header-left">
+      <select id="viewSelect" class="view-select" aria-label="表示するボードを選択"></select>
+    </div>
+    <div class="header-right">
+      <button type="button" id="btnBoardManage" class="icon-btn" data-action="open-board-manage-modal" title="ボード管理">⚙</button>
+      <button type="button" id="btnSearch" class="icon-btn" data-action="open-search" title="検索">🔍</button>
+      <button type="button" id="btnArchive" class="icon-btn" data-action="open-archive" title="アーカイブ">📥</button>
+      <button type="button" id="btnReset" class="icon-btn icon-btn-reset" data-action="reset-data" title="サンプルデータにリセット">↺</button>
+    </div>
+  </header>
+
+  <!-- ============ メイン表示領域（カンバン / 横断ビュー / 検索 / アーカイブ が切り替わる） ============ -->
+  <main id="mainArea" class="main-area"></main>
+
+</div>
+
+<!-- ============ カード詳細モーダル ============ -->
+<div id="cardModal" class="modal-overlay hidden" data-modal="card">
+  <div class="modal card-modal">
+    <form id="cardForm">
+      <div class="modal-header card-modal-header">
+        <input type="text" id="cardTitleInput" class="card-title-input" placeholder="カードのタイトル" maxlength="200" required>
+        <button type="button" class="modal-close" data-action="close-card-modal" title="閉じる">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group form-row">
+          <label class="form-label" for="cardStatusSelect">ステータス</label>
+          <select id="cardStatusSelect" class="form-select">
+            <option value="todo">未着手</option>
+            <option value="doing">作業中</option>
+            <option value="done">完了</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="cardDescInput">説明・メモ</label>
+          <textarea id="cardDescInput" class="form-textarea" rows="4" placeholder="自由に記入してください（任意）"></textarea>
+        </div>
+
+        <div class="form-group form-row">
+          <label class="form-label" for="cardDueInput">期日</label>
+          <input type="date" id="cardDueInput" class="form-input form-input-date">
+          <span id="cardDueIndicator" class="due-indicator"></span>
+        </div>
+
+        <div class="form-group">
+          <span class="form-label">ラベル</span>
+          <div id="cardLabelsSection" class="card-labels-section"><!-- JSで描画 --></div>
+        </div>
+
+        <p class="card-meta-info" id="cardMetaInfo"><!-- 所属ボード名など --></p>
+      </div>
+      <div class="modal-footer card-modal-footer">
+        <div class="footer-left">
+          <button type="button" class="btn btn-secondary" id="btnCardArchive" data-action="archive-card">📥 アーカイブ</button>
+          <button type="button" class="btn btn-danger" id="btnCardDelete" data-action="delete-card">🗑 削除</button>
+        </div>
+        <div class="footer-right">
+          <button type="submit" class="btn btn-primary" data-action="save-card">保存</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ ボード管理モーダル ============ -->
+<div id="boardManageModal" class="modal-overlay hidden" data-modal="board-manage">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">ボード管理</h2>
+      <button type="button" class="modal-close" data-action="close-board-manage-modal" title="閉じる">×</button>
+    </div>
+    <div class="modal-body">
+      <ul id="boardManageList" class="board-list"><!-- JSで描画 --></ul>
+      <div class="board-add-row">
+        <input type="text" id="newBoardNameInput" class="form-input" placeholder="新しいボード名" maxlength="50">
+        <button type="button" class="btn btn-primary" data-action="add-board">＋ ボードを追加</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 汎用確認ダイアログ（削除など） ============ -->
+<div id="confirmModal" class="modal-overlay hidden" data-modal="confirm">
+  <div class="modal confirm-modal">
+    <div class="modal-body">
+      <p id="confirmMessage" class="confirm-message"></p>
+    </div>
+    <div class="modal-footer confirm-footer">
+      <button type="button" class="btn btn-secondary" data-action="confirm-cancel">キャンセル</button>
+      <button type="button" class="btn btn-danger" id="confirmOkBtn" data-action="confirm-ok">実行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ トースト通知 ============ -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
