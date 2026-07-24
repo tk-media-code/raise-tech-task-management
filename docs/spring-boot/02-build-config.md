@@ -118,16 +118,19 @@ spring.jpa.hibernate.ddl-auto=update
 # 補足: Spring Boot 4 / Hibernate 6 は JDBC接続から方言(PostgreSQLDialect)を自動判定するため
 # spring.jpa.properties.hibernate.dialect の明示は不要。
 
-# 接続確認のため /actuator/health に各コンポーネント(db等)の詳細を表示する。
-# 既定は never（{"status":"UP"} のみ）。開発中の確認用に always にする。
-management.endpoint.health.show-details=always
+# /actuator/health の詳細表示レベル。ここ(全環境共通の既定値)は本番を基準に安全側の
+# never（{"status":"UP"} のみ）にしておく。always にするとDB接続状況等の詳細が無認証で
+# 見えてしまい、攻撃者に内部構成のヒントを与えるため（Secure by Default）。
+# こうしておけば、本番デプロイ時にプロファイル指定を忘れても安全側に倒れる。
+# 開発中の疎通確認用に always へ上書きする設定は application-dev.properties 側に置く。
+management.endpoint.health.show-details=never
 ```
 
 ここでは、ファイル内のコメントで触れられている用語を補足します。
 
 - **`${DB_URL}`のようなプレースホルダ**：`application.properties`は、OSの環境変数を`${変数名}`の形で埋め込めます。本プロジェクトでは、ルートの`docker-compose.yml`が`.env`の値を読み取り、`backend`コンテナに環境変数として渡し、それをこのファイルが参照する、という流れになっています。
 - **`spring.jpa.hibernate.ddl-auto=update`**：Hibernateに「エンティティクラスの定義を正としてDBスキーマを自動的に作る／更新する」よう指示する設定です。開発中は手軽ですが、本番運用では意図しないカラム変更が起きうるため非推奨とされ、将来的にはFlyway（SQLファイルでスキーマ変更を管理するマイグレーションツール）に置き換える計画です（[要件定義9.4](../requirements/05-tech-stack-and-roadmap.md#94-必要に応じて導入する補助ツール発展)）。
-- **`management.endpoint.health.show-details=always`**：`spring-boot-starter-actuator`が提供する`/actuator/health`エンドポイントの詳細表示レベルの設定です。既定では単に`{"status":"UP"}`としか返しませんが、`always`にすることでDB接続状況などコンポーネントごとの詳細も返すようになり、開発中の疎通確認に役立ちます。
+- **`management.endpoint.health.show-details=never`**：`spring-boot-starter-actuator`が提供する`/actuator/health`エンドポイントの詳細表示レベルの設定です。`never`は`{"status":"UP"}`のみを返す最も安全な既定値で、全環境共通の設定としてあえてこれを明示しています。開発中にDB接続状況などの詳細を見たい場合は、環境ごとにプロファイルを分けて上書きします（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)で解説）。
 
 `application.properties`にはこのように「なぜこの設定にしたか」までコメントを残す文化がすでにあります。Javaのソースコードにコメントを書く際も、このトーン（何を、だけでなく、なぜ）を踏襲します（[CLAUDE.mdのコーディング規約](../../CLAUDE.md#コーディング規約コメント)）。
 

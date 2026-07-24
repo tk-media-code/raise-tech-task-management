@@ -18,6 +18,7 @@
 | 1〜5章 | Spring Bootの全体アーキテクチャ・DI・起動の仕組み | [01-architecture.md](./01-architecture.md) |
 | 6〜9章 | ビルド（Gradle）とアプリケーション設定 | [02-build-config.md](./02-build-config.md) |
 | 10〜15章 | JPAエンティティ（データの永続化） | [03-entity-jpa.md](./03-entity-jpa.md) |
+| 16章 | 環境ごとの設定切り替え（プロファイル） | [04-profiles.md](./04-profiles.md) |
 
 ## 目次
 
@@ -36,6 +37,7 @@
 13. [複合主キー](./03-entity-jpa.md#13-複合主キー)
 14. [DBレベルの制約（@Check）](./03-entity-jpa.md#14-dbレベルの制約check)
 15. [データモデルとの対応](./03-entity-jpa.md#15-データモデルとの対応)
+16. [環境ごとの設定切り替え（プロファイル）](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)
 
 ---
 
@@ -156,6 +158,14 @@ DB接続情報やHibernateの挙動など、アプリケーションの設定を
 ここまでのエンティティが、要件定義書のデータモデル（ER図）とどう対応しているかを整理します。
 
 📄 詳細：[03-entity-jpa.md](./03-entity-jpa.md#15-データモデルとの対応)
+
+---
+
+## 16. 環境ごとの設定切り替え（プロファイル）
+
+`application.properties`（全環境共通の既定値）に、`application-{プロファイル名}.properties`（差分だけを書いたファイル）を重ね合わせることで、開発・本番など環境ごとに設定を切り替える仕組みです。「デフォルトは安全側（本番相当）にし、開発時だけ緩める」という考え方（Secure by Default）を、実際のActuator設定を例に解説します。
+
+📄 詳細：[04-profiles.md](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)
 
 ---
 

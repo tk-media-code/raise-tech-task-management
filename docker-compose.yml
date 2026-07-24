@@ -17,6 +17,10 @@ services:
       - "8080:8080"
       - "35729:35729" # Spring Boot DevTools の LiveReload（対応ブラウザ拡張と併用する場合に使用）
     environment:
+      # dev プロファイルを有効化し application-dev.properties を読み込ませる
+      # （例: Actuatorのhealth詳細表示を開発用に always へ上書き）。本番相当の既定値は
+      # application.properties 側の安全側の値のままにしたいため、開発時のみ明示的に指定する。
+      SPRING_PROFILES_ACTIVE: dev
       # application.properties が ${DB_URL} などのプレースホルダで参照する環境変数。
       # ホスト名 db は下の db サービス名。Compose が同一ネットワーク上で名前解決する。
       DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
