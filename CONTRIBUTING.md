@@ -91,6 +91,7 @@ feature/<issue番号>-<内容を表す短い英語>
 
 - PR本文には、対応する Issue 番号を **`Closes #<issue番号>`** の形式で必ず記載してください。マージ時に Issue が自動的に close されます
 - レビュー承認は必須にしていません（現状 1人開発のため）。ただし `main` への統合は必ず PR を経由します
+- **マージ方式は「マージコミット」を使ってください。** Squash・Rebaseは使いません（コミット履歴とPR単位の対応を保つため）。GitHub側でもマージコミット以外は選択できないよう設定済みです
 - マージ後は、リモートブランチが自動削除されるよう設定済みです（`gh pr merge --delete-branch` を使うか、GitHub側の自動削除設定に任せてください）
 - マージ後、ローカルの作業ブランチも削除してください
 
@@ -108,8 +109,8 @@ git push -u origin feature/<issue番号>-<内容>
 # PR作成（本文に Closes #<issue番号> を含める）
 gh pr create --fill
 
-# マージ（リモートブランチも同時に削除）
-gh pr merge --squash --delete-branch
+# マージ（マージコミット方式・リモートブランチも同時に削除）
+gh pr merge --merge --delete-branch
 
 # ローカルの後片付け
 git switch main
@@ -126,6 +127,7 @@ git branch -d feature/<issue番号>-<内容>
 | ルール | 内容 |
 | --- | --- |
 | PR必須 | `main` への変更はPR経由のみ可能（直接pushは拒否される） |
+| マージ方式はマージコミットのみ | Squash・Rebaseマージは選択不可 |
 | force push禁止 | 履歴の書き換えを防止 |
 | ブランチ削除禁止 | `main` 自体の削除を防止 |
 | マージ後の自動削除 | PRマージ時、リモートの作業ブランチを自動削除 |
