@@ -37,22 +37,22 @@ graph TD
     Entity --> DB[(PostgreSQL)]
 ```
 
-| 層 | 役割 | 主なアノテーション | 本プロジェクトの状況 |
-| --- | --- | --- | --- |
-| Controller | HTTPリクエストの受け口。URLとメソッド（GET/POST等）に応じて処理を振り分ける | `@RestController`, `@GetMapping` 等 | 未実装 |
-| Service | ビジネスロジック（業務上の処理手順やルール）を担う | `@Service` | 未実装 |
-| Repository | データベースへのアクセスを担う | `@Repository`（Spring Data JPAでは多くの場合インターフェースを定義するだけでよい） | 未実装 |
-| Entity | データベースのテーブル1行に対応するクラス | `@Entity` | **実装済み**（`Board`/`Card`/`Label`/`CardLabel`/`CardLabelId`） |
+| 層         | 役割                                                                        | 主なアノテーション                                                                   | 本プロジェクトの状況                                                             |
+| ---------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Controller | HTTPリクエストの受け口。URLとメソッド（GET/POST等）に応じて処理を振り分ける | `@RestController`, `@GetMapping` 等                                              | 未実装                                                                           |
+| Service    | ビジネスロジック（業務上の処理手順やルール）を担う                          | `@Service`                                                                         | 未実装                                                                           |
+| Repository | データベースへのアクセスを担う                                              | `@Repository`（Spring Data JPAでは多くの場合インターフェースを定義するだけでよい） | 未実装                                                                           |
+| Entity     | データベースのテーブル1行に対応するクラス                                   | `@Entity`                                                                          | **実装済み**（`Board`/`Card`/`Label`/`CardLabel`/`CardLabelId`） |
 
 それぞれの層が「自分より下の層だけ」を呼び出す一方向の依存にすることで、「画面の都合（Controller）がビジネスロジック（Service）に混ざらない」「DBの都合（Repository）がビジネスロジックに直接漏れ出さない」といった関心の分離ができ、変更に強い設計になります。
 
 > **Laravelとの対比**
 >
-> | Laravel | Spring Boot | 補足 |
-> | --- | --- | --- |
-> | `routes/api.php` + Controller | Controller（`@RestController` + `@GetMapping`等） | Laravelはルーティング定義（URL）とControllerクラスが別ファイルですが、Spring Bootは1つのControllerクラスにアノテーションでルーティング情報を直接書きます |
-> | Service（任意で作るクラス） | Service（`@Service`。明確な層として推奨される） | 考え方はほぼ同じです |
-> | Eloquent Model | Entity（`@Entity`）＋ Repository | LaravelのModelは「データの形」と「データアクセス」を1つのクラスが兼ねますが、Spring Bootでは Entity（データの形）と Repository（データアクセス）に分離します |
+> | Laravel                         | Spring Boot                                           | 補足                                                                                                                                                         |
+> | ------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+> | `routes/api.php` + Controller | Controller（`@RestController` + `@GetMapping`等） | Laravelはルーティング定義（URL）とControllerクラスが別ファイルですが、Spring Bootは1つのControllerクラスにアノテーションでルーティング情報を直接書きます     |
+> | Service（任意で作るクラス）     | Service（`@Service`。明確な層として推奨される）     | 考え方はほぼ同じです                                                                                                                                         |
+> | Eloquent Model                  | Entity（`@Entity`）＋ Repository                    | LaravelのModelは「データの形」と「データアクセス」を1つのクラスが兼ねますが、Spring Bootでは Entity（データの形）と Repository（データアクセス）に分離します |
 
 ---
 
@@ -99,13 +99,20 @@ public class TaskManagementApplication {
 }
 ```
 
+> **`TaskManagementApplication.class`とは？（Classリテラル）**
+> `SpringApplication.run(TaskManagementApplication.class, args)`の`TaskManagementApplication.class`は、メソッド呼び出しではありません。Javaでは全てのクラスに対し、JVMがそのクラスの構造情報（クラス名・フィールド・メソッド・付与されたアノテーションなど）を保持する`java.lang.Class`という特別なオブジェクトを実行時に1つ生成します。`ClassName.class`と書くと、インスタンスを介さずにこのオブジェクト（型は`Class<TaskManagementApplication>`）を取得できます。`main()`は`static`メソッドなのでこの時点では`TaskManagementApplication`のインスタンスはまだ1つも存在しませんが、`.class`はインスタンスなしで取得できる値なので問題なく書けます。
+>
+> `SpringApplication.run()`に渡しているのは「自分自身のインスタンス」ではなく「クラスという設計図の情報」です。Spring Bootはこの情報から`@SpringBootApplication`の付与を確認し、このクラスのパッケージ位置（コンポーネントスキャンの基準点）を読み取って、これから構築するアプリケーションの初期化に使います。「自分自身を呼び出す」のではなく、「これから起動処理をする`SpringApplication.run`に、自分の設計図を材料として手渡している」という表現の方が近い動きです。
+>
+> **Laravelとの対比**：PHPにも似た`SomeClass::class`という構文がありますが、こちらは単に**クラスの完全修飾名を表す文字列**を返すだけです。Javaの`.class`はそれより情報量が多く、メソッド一覧やアノテーション情報まで持つ、リフレクション（実行時にクラス構造を調べる仕組み）可能なオブジェクトを返す点が異なります。
+
 `@SpringBootApplication`は、実は次の3つのアノテーションをまとめたものです。
 
-| アノテーション | 役割 |
-| --- | --- |
-| `@SpringBootConfiguration`（`@Configuration`の一種） | このクラス自体をSpring Bootの設定クラスとして扱う |
-| `@EnableAutoConfiguration` | クラスパス上の依存関係（`build.gradle`で追加したstarter）を見て、必要な設定を自動的に有効化する（例：`spring-boot-starter-data-jpa`があればJPA関連のBeanを自動構成する） |
-| `@ComponentScan` | このクラスと同じパッケージ以下（`com.tkmedia.taskmanagement`配下）を探索し、`@Component`系アノテーションの付いたクラスをすべてBeanとして登録する |
+| アノテーション                                           | 役割                                                                                                                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@SpringBootConfiguration`（`@Configuration`の一種） | このクラス自体をSpring Bootの設定クラスとして扱う                                                                                                                            |
+| `@EnableAutoConfiguration`                             | クラスパス上の依存関係（`build.gradle`で追加したstarter）を見て、必要な設定を自動的に有効化する（例：`spring-boot-starter-data-jpa`があればJPA関連のBeanを自動構成する） |
+| `@ComponentScan`                                       | このクラスと同じパッケージ以下（`com.tkmedia.taskmanagement`配下）を探索し、`@Component`系アノテーションの付いたクラスをすべてBeanとして登録する                       |
 
 `main()`メソッドで`SpringApplication.run(...)`を呼び出すと、おおむね次の順序で処理が進みます。
 
@@ -122,15 +129,15 @@ public class TaskManagementApplication {
 
 現時点のバックエンドの実装状況は次のとおりです。
 
-| 層 / 要素 | 状況 | ファイル |
-| --- | --- | --- |
-| 起動クラス | 実装済み | `TaskManagementApplication.java` |
-| Entity（データの型） | 実装済み（5種） | `entity/Board.java` 等（[10〜15章](./03-entity-jpa.md)参照） |
-| Repository（データアクセス） | 未実装 | — |
-| Service（ビジネスロジック） | 未実装 | — |
-| Controller（API） | 未実装 | — |
-| DTO・バリデーション | 未実装 | — |
-| 例外処理 | 未実装 | — |
-| テスト（独自ロジック） | 未実装（`contextLoads`のみ） | `TaskManagementApplicationTests.java` |
+| 層 / 要素                    | 状況                           | ファイル                                                      |
+| ---------------------------- | ------------------------------ | ------------------------------------------------------------- |
+| 起動クラス                   | 実装済み                       | `TaskManagementApplication.java`                            |
+| Entity（データの型）         | 実装済み（5種）                | `entity/Board.java` 等（[10〜15章](./03-entity-jpa.md)参照） |
+| Repository（データアクセス） | 未実装                         | —                                                            |
+| Service（ビジネスロジック）  | 未実装                         | —                                                            |
+| Controller（API）            | 未実装                         | —                                                            |
+| DTO・バリデーション          | 未実装                         | —                                                            |
+| 例外処理                     | 未実装                         | —                                                            |
+| テスト（独自ロジック）       | 未実装（`contextLoads`のみ） | `TaskManagementApplicationTests.java`                       |
 
 今後、Repository → Service → Controllerの順で実装が進んでいくと見込まれます。各層を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従って、`04-repository.md`のようにこのドキュメント群にファイルを追加してください。
