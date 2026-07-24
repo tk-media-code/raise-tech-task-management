@@ -12,6 +12,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
+    container_name: task-management-backend
     ports:
       - "8080:8080"
       - "35729:35729" # Spring Boot DevTools の LiveReload（対応ブラウザ拡張と併用する場合に使用）
@@ -31,16 +32,19 @@ services:
       - gradle-home:/root/.gradle # 依存(jar)キャッシュを永続化し、再起動のたびのDLを防ぐ
       - gradle-project-cache:/workspace/.gradle # プロジェクトのビルドキャッシュを永続化
       - build-output:/workspace/build # ビルド成果物(root所有)をホスト側に書き出さない
+    networks:
+      - app-net
 
   db:
     image: postgres:18
+    container_name: task-management-db
     environment:
       # postgres 公式イメージは初回起動時にこの3つを読み、DBとユーザーを自動作成する。
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432" # 開発時にホストのDBクライアント(psql/DBeaver等)から接続するため公開（任意）
+    # ports は公開しない（内部化）。db への接続は app-net 経由（backend/cloudbeaverから）に限定し、
+    # ホストから実データを見たい場合は cloudbeaver(GUI, http://localhost:8978) 経由で行う。
     volumes:
       # postgres:18 でデータ格納先の既定が変わり、マウント先は /var/lib/postgresql
       # （実データは /var/lib/postgresql/18/docker 配下）。旧来の /var/lib/postgresql/data ではない。
@@ -52,9 +56,36 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s # 初回のDB初期化中は失敗を猶予する
+    networks:
+      - app-net
+
+  # DB内容をブラウザから閲覧・操作するための開発用Web GUI（DBeaver公式のWeb版=CloudBeaver）。
+  # PostgreSQL以外(MySQL等)も同じUIで扱えるため、プロジェクトが変わってもGUI操作に迷わずに済む。
+  cloudbeaver:
+    image: dbeaver/cloudbeaver:26
+    container_name: task-management-cloudbeaver
+    networks:
+      - app-net
+    ports:
+      - "8978:8978" # ブラウザからは http://localhost:8978 でアクセス（backendの8080と衝突しない別ポート）
+    environment:
+      # 初回起動時の管理者アカウントを事前設定し、セットアップウィザードを省略する。
+      # これはGUI自身へのログイン情報で、DB認証(POSTGRES_*)とは別レイヤ。
+      CB_ADMIN_NAME: ${CB_ADMIN_NAME}
+      CB_ADMIN_PASSWORD: ${CB_ADMIN_PASSWORD}
+    volumes:
+      - cloudbeaver-workspace:/opt/cloudbeaver/workspace # 登録したDB接続やGUI設定を永続化
+    depends_on:
+      db:
+        # db の healthcheck が healthy になるまで起動しない（backendと同じ流儀）。
+        condition: service_healthy
 
 volumes:
   gradle-home:
   gradle-project-cache:
   build-output:
   postgres-data: # DBデータの永続化（コンテナを作り直してもデータが残る）
+  cloudbeaver-workspace: # CloudBeaverの設定・登録済みDB接続の永続化
+
+networks:
+  app-net: # backend/db/cloudbeaver 間の内部通信用。db はこのネットワーク経由でのみ到達可能（ホスト非公開）
