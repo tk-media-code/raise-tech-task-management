@@ -1,4 +1,4 @@
-package com.raisetech.taskmanagement;
+package com.tkmedia.taskmanagement;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 /**
  * このアプリケーションの起動クラス。
  * {@code @SpringBootApplication} は {@code @SpringBootConfiguration}・{@code @EnableAutoConfiguration}・
- * {@code @ComponentScan} をまとめたアノテーションで、このクラスと同じパッケージ（com.raisetech.taskmanagement）以下を
+ * {@code @ComponentScan} をまとめたアノテーションで、このクラスと同じパッケージ（com.tkmedia.taskmanagement）以下を
  * コンポーネントスキャンの対象にする（docs/spring-boot/01-architecture.md 4章参照）。
  */
 @SpringBootApplication

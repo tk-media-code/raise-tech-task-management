@@ -1,4 +1,4 @@
-package com.raisetech.taskmanagement;
+package com.tkmedia.taskmanagement;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
