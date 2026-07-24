@@ -4,6 +4,9 @@
 # 起動: docker compose up --build
 # ソースの変更は Gradle の継続ビルド(--continuous)が検知して自動で再コンパイルし、
 # それを Spring Boot DevTools が検知してアプリを高速に再起動します（コンテナは再起動しません）。
+#
+# DB接続情報（DB名・ユーザー名・パスワード）は同ディレクトリの .env から読み込みます。
+# .env はコミットせず、雛形として .env.example を配布します（cp .env.example .env）。
 services:
   backend:
     build:
@@ -12,13 +15,46 @@ services:
     ports:
       - "8080:8080"
       - "35729:35729" # Spring Boot DevTools の LiveReload（対応ブラウザ拡張と併用する場合に使用）
+    environment:
+      # application.properties が ${DB_URL} などのプレースホルダで参照する環境変数。
+      # ホスト名 db は下の db サービス名。Compose が同一ネットワーク上で名前解決する。
+      DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        # db の healthcheck が healthy になるまで backend を起動しない（起動順の制御）。
+        # これが無いと、DBが受付準備を終える前に Spring Boot が接続を試みて失敗し得る。
+        condition: service_healthy
     volumes:
       - ./backend:/workspace
       - gradle-home:/root/.gradle # 依存(jar)キャッシュを永続化し、再起動のたびのDLを防ぐ
       - gradle-project-cache:/workspace/.gradle # プロジェクトのビルドキャッシュを永続化
       - build-output:/workspace/build # ビルド成果物(root所有)をホスト側に書き出さない
 
+  db:
+    image: postgres:18
+    environment:
+      # postgres 公式イメージは初回起動時にこの3つを読み、DBとユーザーを自動作成する。
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432" # 開発時にホストのDBクライアント(psql/DBeaver等)から接続するため公開（任意）
+    volumes:
+      # postgres:18 でデータ格納先の既定が変わり、マウント先は /var/lib/postgresql
+      # （実データは /var/lib/postgresql/18/docker 配下）。旧来の /var/lib/postgresql/data ではない。
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # pg_isready で「接続受付可能」になったかを判定。backend の depends_on から参照する。
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s # 初回のDB初期化中は失敗を猶予する
+
 volumes:
   gradle-home:
   gradle-project-cache:
   build-output:
+  postgres-data: # DBデータの永続化（コンテナを作り直してもデータが残る）
