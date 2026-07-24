@@ -105,7 +105,7 @@ public class TaskManagementApplication {
 | --- | --- |
 | `@SpringBootConfiguration`（`@Configuration`の一種） | このクラス自体をSpring Bootの設定クラスとして扱う |
 | `@EnableAutoConfiguration` | クラスパス上の依存関係（`build.gradle`で追加したstarter）を見て、必要な設定を自動的に有効化する（例：`spring-boot-starter-data-jpa`があればJPA関連のBeanを自動構成する） |
-| `@ComponentScan` | このクラスと同じパッケージ以下（`com.raisetech.taskmanagement`配下）を探索し、`@Component`系アノテーションの付いたクラスをすべてBeanとして登録する |
+| `@ComponentScan` | このクラスと同じパッケージ以下（`com.tkmedia.taskmanagement`配下）を探索し、`@Component`系アノテーションの付いたクラスをすべてBeanとして登録する |
 
 `main()`メソッドで`SpringApplication.run(...)`を呼び出すと、おおむね次の順序で処理が進みます。
 
@@ -114,7 +114,7 @@ public class TaskManagementApplication {
 3. **IoCコンテナ（ApplicationContext）の構築**：見つかったクラスをBeanとしてインスタンス化し、依存関係を解決してDIできる状態にする（[3章](#3-di依存性注入とiocコンテナ)）
 4. **組み込みサーバーの起動**：`spring-boot-starter-webmvc`により、内蔵のWebサーバー（Tomcat）がポート8080で待ち受けを開始する
 
-`@SpringBootApplication`が付いたクラスをどこに置くかで「どこから下のパッケージがスキャン対象になるか」が決まるため、このクラスは通常パッケージ構成の最上位（本プロジェクトでは`com.raisetech.taskmanagement`直下）に置きます。
+`@SpringBootApplication`が付いたクラスをどこに置くかで「どこから下のパッケージがスキャン対象になるか」が決まるため、このクラスは通常パッケージ構成の最上位（本プロジェクトでは`com.tkmedia.taskmanagement`直下）に置きます。
 
 ---
 

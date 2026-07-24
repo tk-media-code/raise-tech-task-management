@@ -1,4 +1,4 @@
-package com.raisetech.taskmanagement.entity;
+package com.tkmedia.taskmanagement.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
