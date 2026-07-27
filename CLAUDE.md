@@ -32,12 +32,15 @@
 4. **新規実装だけでなく既存コードも対象。** 新しい概念を含むファイルを追加・変更する際、近傍の未コメントの既存コードに手を入れる場合は、あわせてコメントを補うことが望ましい。
 5. コメントは`javac`のコンパイル時にすべて破棄されるため、ビルド成果物（`.class`・JAR）には残らない。除去のための追加設定は不要。
 
-## 学習ドキュメント（Spring Boot）
+## 学習ドキュメント（Spring Boot・Java）
 
 Spring Boot自体の理解を深めるための学習ドキュメントを [docs/spring-boot/](./docs/spring-boot/README.md) に整備している。**実装で新しい概念・技術要素（例：Repository、Service、DTO、バリデーション、例外処理、認証など）が登場したら、都度このドキュメント群を更新すること**をルールとする。更新方法は[docs/spring-boot/README.mdの更新ルール](./docs/spring-boot/README.md#このドキュメントの更新ルール)を参照。
+
+Java**言語**自体（本プロジェクトの実装を理解するために必要な範囲に限る）の学習ドキュメントは [docs/java/](./docs/java/README.md) に整備している。実装で新しいJavaの言語機能（例：ジェネリクス、ラムダ式、record、例外処理など）が登場したら、同様に都度このドキュメント群を更新する。更新方法は[docs/java/README.mdの更新ルール](./docs/java/README.md#このドキュメントの更新ルール)を参照。フレームワークの使い方（Spring Boot）と言語自体の文法（Java）のどちらの話か迷ったときは、前者を`docs/spring-boot/`、後者を`docs/java/`に書き分ける。
 
 ## 参考ドキュメント
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) — 開発運用ルール全般（ブランチ命名・PR/マージ手順）
 - [docs/requirements.md](./docs/requirements.md) — 要件定義書（ハブ）
 - [docs/spring-boot/README.md](./docs/spring-boot/README.md) — Spring Boot 学習ドキュメント（アーキテクチャ・各ファイルの役割）
+- [docs/java/README.md](./docs/java/README.md) — Java言語 学習ドキュメント（本プロジェクトの実装に登場する範囲のJava文法）
