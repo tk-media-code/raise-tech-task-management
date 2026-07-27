@@ -218,4 +218,4 @@ public class Card {
 
 ---
 
-*次にRepository層を実装する際は、Spring Data JPAのリポジトリインターフェース・クエリメソッドについて解説する`04-repository.md`を追加する予定です。*
+*Repository層の実装にあわせて、Spring Data JPAのリポジトリインターフェース・クエリメソッドについては[05-repository.md](./05-repository.md)（17〜19章）で解説しています。*

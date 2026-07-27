@@ -124,6 +124,22 @@ spring.jpa.hibernate.ddl-auto=update
 # こうしておけば、本番デプロイ時にプロファイル指定を忘れても安全側に倒れる。
 # 開発中の疎通確認用に always へ上書きする設定は application-dev.properties 側に置く。
 management.endpoint.health.show-details=never
+
+# --- JPA / Web の挙動 ---
+# Open Session In View（既定で有効）は、Controllerがレスポンスを返し終えるまでDB接続と
+# 永続化コンテキストを保持し続ける仕組み。これが有効だと、Serviceを抜けたあとの
+# JSON変換処理の中でも遅延読み込み(LAZY)が"こっそり"成功してしまい、
+# 気づかないうちにN+1問題（一覧のループのたびに追加SQLが発行される状態）を招きやすい。
+# 本プロジェクトはService層のトランザクション内でDTOへの詰め替えまで完了させる方針のため
+# OSIVは不要であり、無効化することで「トランザクションの外で遅延読み込みに触れたら
+# 例外になる」状態にし、事故を静かなN+1ではなく気づけるエラーとして検出できるようにする。
+spring.jpa.open-in-view=false
+
+# Spring MVCが自前で処理する例外（存在しないパラメータ型など）のレスポンスも、
+# RFC 9457（Problem Details for HTTP APIs）形式のJSON（Content-Type: application/problem+json）
+# に統一する。自前の例外ハンドラ（GlobalExceptionHandler）が返す404と形が揃うことで、
+# クライアント側のエラー処理を1本化できる。
+spring.mvc.problemdetails.enabled=true
 ```
 
 ここでは、ファイル内のコメントで触れられている用語を補足します。
@@ -131,6 +147,8 @@ management.endpoint.health.show-details=never
 - **`${DB_URL}`のようなプレースホルダ**：`application.properties`は、OSの環境変数を`${変数名}`の形で埋め込めます。本プロジェクトでは、ルートの`docker-compose.yml`が`.env`の値を読み取り、`backend`コンテナに環境変数として渡し、それをこのファイルが参照する、という流れになっています。
 - **`spring.jpa.hibernate.ddl-auto=update`**：Hibernateに「エンティティクラスの定義を正としてDBスキーマを自動的に作る／更新する」よう指示する設定です。開発中は手軽ですが、本番運用では意図しないカラム変更が起きうるため非推奨とされ、将来的にはFlyway（SQLファイルでスキーマ変更を管理するマイグレーションツール）に置き換える計画です（[要件定義9.4](../requirements/05-tech-stack-and-roadmap.md#94-必要に応じて導入する補助ツール発展)）。
 - **`management.endpoint.health.show-details=never`**：`spring-boot-starter-actuator`が提供する`/actuator/health`エンドポイントの詳細表示レベルの設定です。`never`は`{"status":"UP"}`のみを返す最も安全な既定値で、全環境共通の設定としてあえてこれを明示しています。開発中にDB接続状況などの詳細を見たい場合は、環境ごとにプロファイルを分けて上書きします（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)で解説）。
+- **`spring.jpa.open-in-view=false`**：Repository・Service・Controllerを実装した際（[17〜23章](./05-repository.md)）に追加した設定です。詳しい経緯は[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)を参照してください。
+- **`spring.mvc.problemdetails.enabled=true`**：例外処理を実装した際（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)）に追加した設定です。自前の`@RestControllerAdvice`が返す404と、Spring MVCが自前で処理する400などのエラー形式を統一します。
 
 `application.properties`にはこのように「なぜこの設定にしたか」までコメントを残す文化がすでにあります。Javaのソースコードにコメントを書く際も、このトーン（何を、だけでなく、なぜ）を踏襲します（[CLAUDE.mdのコーディング規約](../../CLAUDE.md#コーディング規約コメント)）。
 
@@ -146,6 +164,37 @@ management.endpoint.health.show-details=never
 いずれの方法でも、起動後に`curl http://localhost:8080/actuator/health`を叩くと、[8章](#8-applicationproperties-の読み方)で解説したActuatorの設定により、DB接続を含めた稼働状況をJSONで確認できます。
 
 なお、DockerやDocker Composeそのものの仕組み（コンテナ・イメージ・volumeなど）は本ドキュメントの対象外です。ここでは「Spring Bootアプリケーションがどう起動するか」に絞って解説しています。
+
+### 動作確認用のダミーデータ投入
+
+Repository・Service・Controller（[17〜23章](./05-repository.md)）の実装後、フロントエンドがまだ無い状態でAPIの動作確認を行うため、`db/seed/dummy-data.sql`（リポジトリルート）にダミーデータ投入用のSQLを用意しています。`TRUNCATE`してから`INSERT`し直す内容になっており、**何度実行しても同じ結果になる**（冪等）ため、動作確認のやり直しがいつでもできます。
+
+```bash
+# リポジトリルートで実行。db サービスは5432番ポートをホストに公開していないため、
+# コンテナ内のpsqlを使う（sh -c で包むことで、compose が渡した環境変数 POSTGRES_USER /
+# POSTGRES_DB をコンテナ側でそのまま展開できる）。
+docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < db/seed/dummy-data.sql
+```
+
+このSQLは`board`/`card`/`label`/`card_label`の4テーブルへのINSERTのみを行うDML（データ操作言語）です。テーブル自体は`ddl-auto=update`（[8章](#8-applicationproperties-の読み方)）によってアプリ起動時に作られるため、**必ずbackendを一度起動した後に**実行する必要があります。
+
+### curlによるエンドポイントの動作確認
+
+ダミーデータ投入後、各エンドポイント（[21章](./06-service-controller.md#21-controller層とrest-api)のエンドポイント一覧）に対してcurlでリクエストを送り、レスポンスを確認します。
+
+```bash
+# ボード一覧
+curl -s http://localhost:8080/api/boards | jq
+
+# カード一覧（絞り込み例：ボード指定 + キーワード + ラベル指定を組み合わせ）
+curl -s 'http://localhost:8080/api/cards?boardId=1&keyword=見積&labelIds=1' | jq
+
+# 存在しないIDを指定した場合は404（RFC 9457のProblemDetail形式。23章参照）
+curl -s -i http://localhost:8080/api/boards/999
+```
+
+開発環境では`logging.level.org.hibernate.SQL=debug`（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)と同様、`application-dev.properties`限定の設定）によりSQLログが出力されるため、`docker compose logs -f backend`で追いながらリクエストを送ると、実際に発行されているSQLの本数・内容を確認できます。これはN+1問題（[24章](./07-jpa-performance.md#24-n1問題とその回避)）が起きていないことの実地確認として重要です。
 
 ---
 

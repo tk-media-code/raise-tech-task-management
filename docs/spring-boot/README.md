@@ -19,6 +19,9 @@
 | 6〜9章 | ビルド（Gradle）とアプリケーション設定 | [02-build-config.md](./02-build-config.md) |
 | 10〜15章 | JPAエンティティ（データの永続化） | [03-entity-jpa.md](./03-entity-jpa.md) |
 | 16章 | 環境ごとの設定切り替え（プロファイル） | [04-profiles.md](./04-profiles.md) |
+| 17〜19章 | Repository層 | [05-repository.md](./05-repository.md) |
+| 20〜23章 | Service層・Controller層・DTO・例外処理 | [06-service-controller.md](./06-service-controller.md) |
+| 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 
 ## 目次
 
@@ -38,6 +41,15 @@
 14. [DBレベルの制約（@Check）](./03-entity-jpa.md#14-dbレベルの制約check)
 15. [データモデルとの対応](./03-entity-jpa.md#15-データモデルとの対応)
 16. [環境ごとの設定切り替え（プロファイル）](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)
+17. [Repository層とSpring Data JPA](./05-repository.md#17-repository層とspring-data-jpa)
+18. [クエリメソッド（メソッド名からのクエリ自動生成）](./05-repository.md#18-クエリメソッドメソッド名からのクエリ自動生成)
+19. [@QueryとJPQL（動的な絞り込み）](./05-repository.md#19-queryとjpql動的な絞り込み)
+20. [Service層と@Transactional](./06-service-controller.md#20-service層とtransactional)
+21. [Controller層とREST API](./06-service-controller.md#21-controller層とrest-api)
+22. [DTO（レコード）でエンティティを外に出さない](./06-service-controller.md#22-dtoレコードでエンティティを外に出さない)
+23. [例外処理と@RestControllerAdvice](./06-service-controller.md#23-例外処理とrestcontrolleradvice)
+24. [N+1問題とその回避](./07-jpa-performance.md#24-n1問題とその回避)
+25. [open-in-viewと遅延読み込みの境界](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)
 
 ---
 
@@ -166,6 +178,78 @@ DB接続情報やHibernateの挙動など、アプリケーションの設定を
 `application.properties`（全環境共通の既定値）に、`application-{プロファイル名}.properties`（差分だけを書いたファイル）を重ね合わせることで、開発・本番など環境ごとに設定を切り替える仕組みです。「デフォルトは安全側（本番相当）にし、開発時だけ緩める」という考え方（Secure by Default）を、実際のActuator設定を例に解説します。
 
 📄 詳細：[04-profiles.md](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)
+
+---
+
+## 17. Repository層とSpring Data JPA
+
+インターフェースを宣言するだけで、データアクセスの実装クラスをSpring Data JPAが自動生成してくれる仕組みです。`JpaRepository`を継承することで得られる基本メソッドと、`@Repository`を明示しなくてよい理由を解説します。
+
+📄 詳細：[05-repository.md](./05-repository.md#17-repository層とspring-data-jpa)
+
+---
+
+## 18. クエリメソッド（メソッド名からのクエリ自動生成）
+
+`findByBoardIdOrderByIdAsc`のような、メソッド名そのものからSpring Data JPAがクエリを組み立てる仕組みです。命名規則と、条件が複雑になったときの限界を解説します。
+
+📄 詳細：[05-repository.md](./05-repository.md#18-クエリメソッドメソッド名からのクエリ自動生成)
+
+---
+
+## 19. `@Query`とJPQL（動的な絞り込み）
+
+`CardRepository.search`を教材に、SQLに似た問い合わせ言語JPQLで動的な絞り込み条件を書く方法を解説します。null-guardイディオム、`in`句に空リストを渡せない問題への対処、`order by`に潜む文字列ソートの罠、Specificationを採用しなかった理由を扱います。
+
+📄 詳細：[05-repository.md](./05-repository.md#19-queryとjpql動的な絞り込み)
+
+---
+
+## 20. Service層と`@Transactional`
+
+ビジネスロジックを担うService層の役割と、`@Transactional(readOnly = true)`が持つ3つの効果（トランザクション境界・遅延読み込みとの関係・読み取り専用の最適化）を解説します。
+
+📄 詳細：[06-service-controller.md](./06-service-controller.md#20-service層とtransactional)
+
+---
+
+## 21. Controller層とREST API
+
+`@RestController`・`@GetMapping`・`@RequestParam`など、HTTPリクエストの受け口となるController層の書き方と、本プロジェクトのエンドポイント一覧を解説します。
+
+📄 詳細：[06-service-controller.md](./06-service-controller.md#21-controller層とrest-api)
+
+---
+
+## 22. DTO（レコード）でエンティティを外に出さない
+
+Java の`record`を使ったDTOの書き方と、エンティティをAPIレスポンスとして直接返さない理由（遅延読み込みの罠・DBとAPI契約の分離）を解説します。
+
+📄 詳細：[06-service-controller.md](./06-service-controller.md#22-dtoレコードでエンティティを外に出さない)
+
+---
+
+## 23. 例外処理と`@RestControllerAdvice`
+
+`@RestControllerAdvice`による例外処理の一元化と、RFC 9457に沿った`ProblemDetail`でのエラーレスポンスの返し方を解説します。
+
+📄 詳細：[06-service-controller.md](./06-service-controller.md#23-例外処理とrestcontrolleradvice)
+
+---
+
+## 24. N+1問題とその回避
+
+一覧取得後に要素ごとの追加SQLが発行されてしまうN+1問題と、本プロジェクトでの回避方針（`join fetch`とIN句によるまとめ取得の使い分け）を、実際のSQLログとあわせて解説します。
+
+📄 詳細：[07-jpa-performance.md](./07-jpa-performance.md#24-n1問題とその回避)
+
+---
+
+## 25. `open-in-view`と遅延読み込みの境界
+
+Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙動と、それを無効化する`spring.jpa.open-in-view=false`の意図を解説します。
+
+📄 詳細：[07-jpa-performance.md](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)
 
 ---
 
