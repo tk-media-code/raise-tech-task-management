@@ -39,9 +39,9 @@ graph TD
 
 | 層         | 役割                                                                        | 主なアノテーション                                                                   | 本プロジェクトの状況                                                             |
 | ---------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Controller | HTTPリクエストの受け口。URLとメソッド（GET/POST等）に応じて処理を振り分ける | `@RestController`, `@GetMapping` 等                                              | 未実装                                                                           |
-| Service    | ビジネスロジック（業務上の処理手順やルール）を担う                          | `@Service`                                                                         | 未実装                                                                           |
-| Repository | データベースへのアクセスを担う                                              | `@Repository`（Spring Data JPAでは多くの場合インターフェースを定義するだけでよい） | 未実装                                                                           |
+| Controller | HTTPリクエストの受け口。URLとメソッド（GET/POST等）に応じて処理を振り分ける | `@RestController`, `@GetMapping` 等                                              | **実装済み**（`BoardController`/`CardController`。GET系のみ。[21章](./06-service-controller.md#21-controller層とrest-api)） |
+| Service    | ビジネスロジック（業務上の処理手順やルール）を担う                          | `@Service`                                                                         | **実装済み**（`BoardService`/`CardService`。[20章](./06-service-controller.md#20-service層とtransactional)） |
+| Repository | データベースへのアクセスを担う                                              | `@Repository`（Spring Data JPAでは多くの場合インターフェースを定義するだけでよい） | **実装済み**（`BoardRepository`/`CardRepository`/`LabelRepository`/`CardLabelRepository`。[17章](./05-repository.md#17-repository層とspring-data-jpa)） |
 | Entity     | データベースのテーブル1行に対応するクラス                                   | `@Entity`                                                                          | **実装済み**（`Board`/`Card`/`Label`/`CardLabel`/`CardLabelId`） |
 
 それぞれの層が「自分より下の層だけ」を呼び出す一方向の依存にすることで、「画面の都合（Controller）がビジネスロジック（Service）に混ざらない」「DBの都合（Repository）がビジネスロジックに直接漏れ出さない」といった関心の分離ができ、変更に強い設計になります。
@@ -65,11 +65,12 @@ graph TD
 
 この仕組みを支えているのが**IoCコンテナ（Inversion of Control、制御の反転コンテナ）**で、Spring Bootでは`ApplicationContext`と呼ばれる部品です。IoCコンテナは、`@Component`・`@Service`・`@Repository`・`@Controller`（`@RestController`）などのアノテーションが付いたクラスをアプリケーション起動時に自動的に見つけ出し（[4章](#4-アプリケーションの起動の仕組み)のコンポーネントスキャン）、インスタンス化して管理します。この管理下に置かれたインスタンスのことを**Bean（ビーン）**と呼びます。
 
-Beanを利用する側（例：Controller）は、コンストラクタの引数に必要なBeanの型を書いておくだけで、IoCコンテナが自動的にそのBeanを見つけて渡してくれます（コンストラクタインジェクション）。これが今後Controller・Serviceを実装する際の基本パターンになります。
+Beanを利用する側（例：Controller）は、コンストラクタの引数に必要なBeanの型を書いておくだけで、IoCコンテナが自動的にそのBeanを見つけて渡してくれます（コンストラクタインジェクション）。これがController・Serviceを実装する際の基本パターンです。
 
 ```java
-// 今後実装するControllerのイメージ（コンストラクタインジェクションの例）
+// 実際のBoardController（コンストラクタインジェクションの例。docs/spring-boot/06-service-controller.md 21章参照）
 @RestController
+@RequestMapping("/api/boards")
 public class BoardController {
 
     private final BoardService boardService;
@@ -129,15 +130,16 @@ public class TaskManagementApplication {
 
 現時点のバックエンドの実装状況は次のとおりです。
 
-| 層 / 要素                    | 状況                           | ファイル                                                      |
-| ---------------------------- | ------------------------------ | ------------------------------------------------------------- |
-| 起動クラス                   | 実装済み                       | `TaskManagementApplication.java`                            |
-| Entity（データの型）         | 実装済み（5種）                | `entity/Board.java` 等（[10〜15章](./03-entity-jpa.md)参照） |
-| Repository（データアクセス） | 未実装                         | —                                                            |
-| Service（ビジネスロジック）  | 未実装                         | —                                                            |
-| Controller（API）            | 未実装                         | —                                                            |
-| DTO・バリデーション          | 未実装                         | —                                                            |
-| 例外処理                     | 未実装                         | —                                                            |
-| テスト（独自ロジック）       | 未実装（`contextLoads`のみ） | `TaskManagementApplicationTests.java`                       |
+| 層 / 要素                      | 状況                                   | ファイル                                                                                                      |
+| ------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 起動クラス                     | 実装済み                               | `TaskManagementApplication.java`                                                                              |
+| Entity（データの型）           | 実装済み（5種）                        | `entity/Board.java` 等（[10〜15章](./03-entity-jpa.md)参照）                                                  |
+| Repository（データアクセス）   | 実装済み（GET系のみ）                  | `repository/BoardRepository.java` 等（[17〜19章](./05-repository.md)参照）                                     |
+| Service（ビジネスロジック）    | 実装済み（GET系のみ）                  | `service/BoardService.java` 等（[20章](./06-service-controller.md#20-service層とtransactional)参照）           |
+| Controller（API）              | 実装済み（GET系のみ）                  | `controller/BoardController.java` 等（[21章](./06-service-controller.md#21-controller層とrest-api)参照）       |
+| DTO（レスポンス用）            | 実装済み                               | `dto/BoardResponse.java` 等（[22章](./06-service-controller.md#22-dtoレコードでエンティティを外に出さない)参照） |
+| バリデーション（入力チェック） | 未実装（Write系API実装時に対応予定）   | —                                                                                                              |
+| 例外処理                       | 実装済み（404のみ）                    | `exception/GlobalExceptionHandler.java`（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)参照） |
+| テスト（独自ロジック）         | 未実装（`contextLoads`のみ）         | `TaskManagementApplicationTests.java`                                                                         |
 
-今後、Repository → Service → Controllerの順で実装が進んでいくと見込まれます。各層を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従って、`04-repository.md`のようにこのドキュメント群にファイルを追加してください。
+現時点ではRead系（GET）のCRUD操作のみが実装済みです。Write系（POST/PUT/DELETE）の実装にあわせて、DTOのバリデーション（`spring-boot-starter-validation`の導入）や、404以外の例外パターン（400 Bad Requestなど）への対応が今後の課題になります。新しい層・概念を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従ってこのドキュメント群を更新してください。

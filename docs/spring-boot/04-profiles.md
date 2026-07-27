@@ -34,13 +34,22 @@ Spring Bootは起動時に、まず`application.properties`を読み込みます
 
 ### このプロジェクトでの適用：Secure by Default
 
-本プロジェクトでは、`/actuator/health`エンドポイントの詳細表示設定（[8章](./02-build-config.md#8-applicationproperties-の読み方)）でこの仕組みを使っています。
+本プロジェクトでは、次の2つの設定でこの仕組みを使っています。
+
+**例1：`/actuator/health`エンドポイントの詳細表示設定**（[8章](./02-build-config.md#8-applicationproperties-の読み方)）
 
 - `application.properties`（共通・全環境の既定値）: `management.endpoint.health.show-details=never`
 - `application-dev.properties`（開発時のみの上書き）: `management.endpoint.health.show-details=always`
 - `docker-compose.yml`の`backend`サービスに`SPRING_PROFILES_ACTIVE=dev`を設定し、開発時（`docker compose up`実行時）のみ`dev`プロファイルを有効化
 
 あえて「共通ファイルを本番基準の安全な値にし、開発用だけ緩める」という順序にしているのは、**Secure by Default（Fail-Safe Defaults）**という考え方によるものです。仮に本番環境でプロファイルの指定を忘れる、あるいは設定ファイルの配置を誤るといったミスがあっても、defaultプロファイル（＝共通ファイルの値のみ）で起動するため、安全側の`never`のまま動作します。逆に「共通を`always`にして本番で上書きする」設計だと、同じミスが本番でのDB接続状況の漏洩に直結してしまいます。「ミスをしたときにどちらに転ぶか」という結果の非対称性を踏まえ、危険な側ではなく安全な側をデフォルトにするのが基本方針です。
+
+**例2：発行されるSQLのログ出力**（Repository層の実装時に追加。[19章](./05-repository.md#19-queryとjpql動的な絞り込み)・[24章](./07-jpa-performance.md#24-n1問題とその回避)参照）
+
+- `application.properties`（共通・全環境の既定値）: 何も設定しない（＝SQLログは出ない）
+- `application-dev.properties`（開発時のみの上書き）: `logging.level.org.hibernate.SQL=debug`など
+
+SQLログにはWHERE句に渡した実データ（絞り込みキーワードなど）が載り得るため、health詳細表示と同じ理由で全環境共通側には置かず、devプロファイル限定にしています。本番相当の環境で機密性のあるログを誤って出力してしまうリスクを、プロファイルの構造自体で防いでいます。
 
 ### 実際のファイル：application-dev.properties
 
@@ -55,6 +64,18 @@ Spring Bootは起動時に、まず`application.properties`を読み込みます
 # 全環境共通の既定値(application.properties)は安全側の never なので、開発時だけここで
 # always に上書きする。
 management.endpoint.health.show-details=always
+
+# --- 発行されるSQLのログ出力（開発用） ---
+# JPAは「Javaのメソッド呼び出し」と「実際に発行されるSQL」が1対1で見えないため、
+# 意図した通りの絞り込み・件数のクエリになっているか、N+1問題（一覧のループのたびに
+# 追加SQLが発行される状態）が起きていないかは、ログを見ないと気づけない。
+# SQLログにはWHERE句に渡した実データが載り得るため、health詳細表示と同じ理由
+# （Secure by Default）で全環境共通側には置かず、devプロファイル限定にする。
+logging.level.org.hibernate.SQL=debug
+# ログに出るSQL中の "?" プレースホルダに、実際にバインドされた値も出す。
+logging.level.org.hibernate.orm.jdbc.bind=trace
+# 1行の長いSQLを改行・インデント付きで整形し、ログを読みやすくする。
+spring.jpa.properties.hibernate.format_sql=true
 ```
 
 ---
