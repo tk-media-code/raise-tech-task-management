@@ -150,6 +150,8 @@ public record CardResponse(
 
 Java 25（正確にはJava 16以降）の`record`は、フィールド・コンストラクタ・各フィールドの値を返すアクセサメソッド（`id()`のような、`getId()`ではなく`id()`という名前になる点に注意）・`equals()`/`hashCode()`/`toString()`を、この1行の宣言だけで自動生成してくれる「不変の入れ物」用のクラスです。DTOは「Controllerが受け取った値、あるいはServiceが組み立てた値をそのまま運ぶだけ」の役割なので、Lombok未導入の本プロジェクトでは、手書きのgetter/setterクラスよりrecordの方が本質に合っています。record内のコンポーネント（`id`, `boardId`, ...）の宣言順が、そのままJSON化した際のキーの出力順になります。
 
+📄 `record`が自動生成するもの（コンストラクタ・アクセサ・`equals`/`hashCode`/`toString`）を言語構文として詳しく知りたい場合は、[docs/java/03-type-system.md](../java/03-type-system.md#15-record) の15章を参照してください。
+
 ### なぜエンティティを直接returnしないのか
 
 1. `Card.board`は`fetch = LAZY`（[12章](./03-entity-jpa.md#12-リレーション関連の書き方)）です。エンティティをそのままJacksonでJSONに変換しようとすると、トランザクションの外側（`open-in-view=false`の下ではJSON変換のタイミングが該当）でこの遅延プロキシに触れることになり、`LazyInitializationException`を招きます。トランザクション内であっても、Jacksonが関連を辿ろうとして意図しない追加SQL（N+1、[24章](./07-jpa-performance.md#24-n1問題とその回避)）を発生させかねません

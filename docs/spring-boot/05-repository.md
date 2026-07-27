@@ -26,6 +26,8 @@ public interface BoardRepository extends JpaRepository<Board, Integer> {
 | `extends JpaRepository<Board, Integer>` | 「対象のエンティティは`Board`、その主キーの型は`Integer`」という2つの型引数を指定する。これだけで`findById`・`findAll`・`save`・`deleteById`・`existsById`・`count`といった基本的なCRUDメソッドが**実装なしで**使えるようになる |
 | `@Repository`を書いていない | Spring Data JPAが`JpaRepository`を継承したインターフェースを自動的に見つけ、コンポーネントスキャン（[4章](./01-architecture.md#4-アプリケーションの起動の仕組み)）の対象として登録してくれるため、明示的なアノテーションは不要 |
 
+📄 `<Board, Integer>`のような型引数（ジェネリクス）の読み方自体は、[docs/java/04-generics-collections.md](../java/04-generics-collections.md#18-ジェネリクス)の18章で解説しています。
+
 実装クラスの正体は、アプリ起動時にSpring Data JPAが動的に生成する**プロキシ**（インターフェースを実装したダミーの実体）です。`BoardService`（[20章](./06-service-controller.md#20-service層とtransactional)）はこのプロキシをDIで受け取り、実際にJPAが書かれたSQL相当の処理を呼び出す、という形になります。
 
 > **Laravelとの対比**

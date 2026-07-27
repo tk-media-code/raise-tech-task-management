@@ -50,6 +50,8 @@ private List<CardResponse> toResponses(List<Card> cards) {
 2. **2本目**：`CardLabelRepository.findAllWithLabelByCardIdIn`が、1本目で取れた全カードIDを`IN`句に渡し、`card_label`と`label`を`join fetch`で一括取得する
 3. Java側（`Collectors.groupingBy`）でcardIdごとにラベルをグルーピングし、DTOを組み立てる
 
+📄 `.stream().map().toList()`やメソッド参照（`Card::getId`）、`Collectors.groupingBy`の読み方といった、Java言語としてのStream APIの構文は[docs/java/05-lambda-stream.md](../java/05-lambda-stream.md#23-stream-api)の23章で解説しています。
+
 型を分けて整理すると、この実装は2つの異なるN+1回避パターンを使い分けています。
 
 | 関連の種類 | 回避パターン | 使用箇所 |
