@@ -8,6 +8,26 @@
 # DB接続情報（DB名・ユーザー名・パスワード）は同ディレクトリの .env から読み込みます。
 # .env はコミットせず、雛形として .env.example を配布します（cp .env.example .env）。
 services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: task-management-frontend
+    ports:
+      - "5173:5173" # ブラウザからは http://localhost:5173 でアクセス（backendの8080・cloudbeaverの8978と衝突しない別ポート）
+    volumes:
+      - ./frontend:/workspace
+      # ホスト側でバインドマウントした ./frontend が /workspace/node_modules も上書きしてしまうと、
+      # イメージビルド時に npm ci で作ったLinux向けnode_modulesが消えてしまう。
+      # 名前付きボリュームを重ねてそこだけコンテナ管理にすることで、ホストとコンテナのOSが違っても
+      # （例：ネイティブ依存を含むパッケージ）正しく動くnode_modulesを保つ（build-outputと同じ発想）。
+      - frontend-node-modules:/workspace/node_modules
+    networks:
+      - app-net
+    # depends_on は付けない。frontendはビルド時にbackendへ接続しないため
+    # （API呼び出しはコンテナ起動後、ブラウザがdev serverからHTMLを受け取ってから発生する）、
+    # 起動順序を縛る必要がない。
+
   backend:
     build:
       context: ./backend
@@ -85,6 +105,7 @@ services:
         condition: service_healthy
 
 volumes:
+  frontend-node-modules: # コンテナ内でnpm ciしたnode_modulesをホストのバインドマウントから守る
   gradle-home:
   gradle-project-cache:
   build-output:
@@ -92,4 +113,6 @@ volumes:
   cloudbeaver-workspace: # CloudBeaverの設定・登録済みDB接続の永続化
 
 networks:
-  app-net: # backend/db/cloudbeaver 間の内部通信用。db はこのネットワーク経由でのみ到達可能（ホスト非公開）
+  app-net: # frontend/backend/db/cloudbeaver 間の内部通信用。db はこのネットワーク経由でのみ到達可能（ホスト非公開）
+  # frontendは今のところ他サービスとapp-net経由の通信を行わない（devサーバーがブラウザに
+  # 配信するだけ）が、将来的な構成変更（例：本番でのリバースプロキシ経由通信）に備えて参加させておく。

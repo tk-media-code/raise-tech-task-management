@@ -39,7 +39,7 @@
 | Node.js（フロントエンドのビルド／実行環境） | Active LTS | Node.js 24（LTS） |
 | Spring Boot | 最新安定版（LTS区分なし） | Spring Boot 4.1 |
 | React | 最新安定版（LTS区分なし） | React 19系 |
-| TypeScript | 最新安定版（LTS区分なし） | TypeScript 5系 |
+| TypeScript | 最新安定版（LTS区分なし） | TypeScript 6系 |
 | PostgreSQL | 最新安定版（メジャーバージョンごとに約5年サポート） | PostgreSQL 18 |
 
 ### 9.3 実行環境（Dockerコンテナ構成）
