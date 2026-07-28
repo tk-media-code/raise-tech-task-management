@@ -2,7 +2,7 @@
 
 [← Java学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **26〜29章** をまとめています。
+> 元の学習ドキュメントにおける **26〜30章** をまとめています。
 
 ---
 
@@ -130,4 +130,48 @@ if (this == o) {
 | テキストブロックを値に取る | `@Query("""..."""）` | [26章](#26-文字列とテキストブロック)のテキストブロックを、そのままアノテーションの要素値として渡している |
 | パラメータへの付与 | `@PathVariable Integer id`、`@Param("boardId") Integer boardId` | クラス・メソッドだけでなく、メソッドの引数1つ1つにも付けられる |
 
-`@ExceptionHandler(ResourceNotFoundException.class)`は、実は2つの省略が重なった書き方です。この要素は本来「複数の例外クラスを配列で受け取れる」ように定義されていますが、渡す値が1つだけの場合は配列の`{ }`を省略して単一の値をそのまま書くことができ、さらに要素名が`value`であるためその名前自体も省略できます。省略しない場合の完全な書き方は`@ExceptionHandler(value = { ResourceNotFoundException.class })`です。
+`@ExceptionHandler(ResourceNotFoundException.class)`は、実は2つの省略が重なった書き方です。この要素は本来「複数の例外クラスを配列で受け取れる」ように定義されていますが、渡す値が1つだけの場合は配列の`{ }`を省略して単一の値をそのまま書くことができ、さらに要素名が`value`であるためその名前自体も省略できます。省略しない場合の完全な書き方は`@ExceptionHandler(value = { ResourceNotFoundException.class })`です（ここで登場する「配列」については[30章](#30-配列と可変長引数)で扱います）。
+
+---
+
+## 30. 配列と可変長引数
+
+> **配列とは？**
+> 同じ型の値を、あらかじめ決めた個数だけ並べて格納する入れ物です。`String[]`は「`String`を格納する配列」という型を表し、生成時に決めた長さは後から変更できません。
+
+本プロジェクトのコレクションは、これまで一貫して`List`・`Map`（[19章](./04-generics-collections.md#19-コレクション)）で表現されており、配列は`main(String[] args)`（Javaの規約で決まった書き方）以外には登場していませんでした。CORSの設定クラス`CorsConfig`（[docs/spring-boot/08-configuration-cors.md 26〜27章](../spring-boot/08-configuration-cors.md)）で、初めて配列と可変長引数が実際のフィールド・メソッド呼び出しとして登場します。
+
+```java
+private final String[] allowedOrigins;
+
+public CorsConfig(@Value("${app.cors.allowed-origins}") String[] allowedOrigins) {
+	this.allowedOrigins = allowedOrigins;
+}
+```
+
+`String[] allowedOrigins`は「可変長の`List<String>`」ではなく「固定長の配列」です。`@Value`が読んだカンマ区切りのプロパティ値を、Springの`ConversionService`がこの配列に変換して注入します。
+
+### なぜ`List`ではなく配列なのか
+
+本プロジェクトは基本方針として集合を`List`で表現していますが（[19章](./04-generics-collections.md#19-コレクション)）、`CorsConfig`だけは配列を使っています。理由は呼び出す先のAPI（`CorsRegistration`）の都合です。
+
+```java
+registry.addMapping("/api/**")
+		.allowedOrigins(allowedOrigins) // String... を受け取るメソッド
+		.allowedMethods("GET")
+		.allowCredentials(false);
+```
+
+`allowedOrigins(String... origins)`のように定義されたメソッドは、引数の個数が可変な**可変長引数（varargs）**を受け取ります。可変長引数は実体としては配列であり、呼び出す側が`List<String>`しか持っていない場合は`list.toArray(new String[0])`のような変換を挟む必要があります。`Spring`側のAPIが配列（＝可変長引数）を要求している以上、`List`で保持しても最終的に配列へ変換する手間が増えるだけなので、`CorsConfig`ではフィールド自体を配列にして、変換の手間そのものを無くしています。
+
+### 呼び出す側から見た可変長引数
+
+`.allowedMethods("GET")`や`.allowedOrigins(allowedOrigins)`のように、可変長引数のメソッドは「値を1つだけ渡す」「複数の値をカンマ区切りで渡す」「配列をそのまま渡す」のいずれの形でも呼び出せます。
+
+```java
+.allowedMethods("GET")                    // 1個だけ
+.allowedMethods("GET", "POST")            // 複数個（可変長引数の本来の書き方）
+.allowedOrigins(allowedOrigins)           // 配列をそのまま渡す（可変長引数は配列と互換）
+```
+
+呼び出される側（メソッドの定義）だけが`...`という特別な構文を使い、内部では配列として扱われます。呼び出す側は配列であることを意識せず、複数の引数を並べるだけで済みます。

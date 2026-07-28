@@ -23,6 +23,7 @@
 | 17〜19章 | Repository層 | [05-repository.md](./05-repository.md) |
 | 20〜23章 | Service層・Controller層・DTO・例外処理 | [06-service-controller.md](./06-service-controller.md) |
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
+| 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
 
 ## 目次
 
@@ -51,6 +52,8 @@
 23. [例外処理と@RestControllerAdvice](./06-service-controller.md#23-例外処理とrestcontrolleradvice)
 24. [N+1問題とその回避](./07-jpa-performance.md#24-n1問題とその回避)
 25. [open-in-viewと遅延読み込みの境界](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)
+26. [`@Configuration`とBean定義](./08-configuration-cors.md#26-configurationとbean定義)
+27. [CORSとフロントエンドとの接続](./08-configuration-cors.md#27-corsとフロントエンドとの接続)
 
 ---
 
@@ -251,6 +254,22 @@ Java の`record`を使ったDTOの書き方と、エンティティをAPIレス�
 Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙動と、それを無効化する`spring.jpa.open-in-view=false`の意図を解説します。
 
 📄 詳細：[07-jpa-performance.md](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)
+
+---
+
+## 26. `@Configuration`とBean定義
+
+`@RestController`・`@Service`・`@RestControllerAdvice`と同じくコンポーネントスキャンでBeanとして登録されますが、役割が「業務処理」ではなく「フレームワークの構成」である点が異なります。本プロジェクト初の`@Configuration`クラスであるCORS設定（`CorsConfig`）を教材に、`@Bean`メソッドとの使い分けや`WebMvcConfigurer`の位置づけを解説します。
+
+📄 詳細：[08-configuration-cors.md](./08-configuration-cors.md#26-configurationとbean定義)
+
+---
+
+## 27. CORSとフロントエンドとの接続
+
+フロントエンド（`http://localhost:5173`）とバックエンド（`http://localhost:8080`）が別オリジンになるため必要になる、CORS（Cross-Origin Resource Sharing）の設定を解説します。同一オリジンポリシーの仕組み、単純リクエストとプリフライトの違い、`CorsConfig`の実装、そして`curl`による動作確認までを扱います。
+
+📄 詳細：[08-configuration-cors.md](./08-configuration-cors.md#27-corsとフロントエンドとの接続)
 
 ---
 

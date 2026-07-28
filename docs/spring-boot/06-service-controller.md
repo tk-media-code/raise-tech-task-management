@@ -130,7 +130,7 @@ public List<CardResponse> list(
 
 `GET /api/cards`は、条件に合致するカードが1件も無くても**HTTP 200・空配列（`[]`）**を返します。一覧を取得するエンドポイントにとって「結果が空であること」自体は正常な結果であり、404（Not Found）にはしません。一方、`GET /api/boards/{id}`のように**1件を名指しで取得する**エンドポイントで、そのIDが存在しない場合は404を返します（[23章](#23-例外処理とrestcontrolleradvice)）。この使い分けは、REST APIの一般的な設計慣習に沿ったものです。
 
-> CORS（Cross-Origin Resource Sharing。異なるオリジン間の通信を許可する設定）は、フロントエンドの実装に着手する際にあわせて対応する予定です。フロントエンドが未着手の現時点では、動作確認をcurlで行うため設定していません（[要件定義9.3](../requirements/05-tech-stack-and-roadmap.md#93-フロントエンドバックエンド間の連携)）。
+> CORS（Cross-Origin Resource Sharing。異なるオリジン間の通信を許可する設定）は、フロントエンドの実装に着手した時点で対応しました。開発時はフロントエンド（`http://localhost:5173`）とAPI（`http://localhost:8080`）でポートが異なり別オリジンになるため、`CorsConfig`（`config/`パッケージ）で許可を与えています。仕組みと設定の詳細は[27章](./08-configuration-cors.md#27-corsとフロントエンドとの接続)を参照してください。
 
 ---
 
