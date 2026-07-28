@@ -1,0 +1,6 @@
+/*
+ * Tailwind CSS v4 の読み込み方式。v3までの tailwind.config.js / postcss.config.js による
+ * ビルド設定は不要で、この1行だけで base/components/utilities 相当のスタイルが有効になる
+ * （実際のコンパイルは vite.config.ts に追加した @tailwindcss/vite プラグインが行う）。
+ */
+@import "tailwindcss";
