@@ -212,7 +212,7 @@ DB接続情報やHibernateの挙動など、アプリケーションの設定を
 
 ## 20. Service層と`@Transactional`
 
-ビジネスロジックを担うService層の役割と、`@Transactional(readOnly = true)`が持つ3つの効果（トランザクション境界・遅延読み込みとの関係・読み取り専用の最適化）を解説します。
+ビジネスロジックを担うService層の役割を解説したうえで、`@Transactional`をトランザクションの基礎（ACID・分離レベル）から掘り下げます。参照専用の本プロジェクトでもなぜトランザクションが必要か、`@Transactional`がAOPプロキシとしてどう動いているか（自己呼び出しが効かない罠・伝播・`readOnly`の実体）、psqlでの2セッション実験による分離レベルの体感まで扱います。
 
 📄 詳細：[06-service-controller.md](./06-service-controller.md#20-service層とtransactional)
 
@@ -244,7 +244,7 @@ Java の`record`を使ったDTOの書き方と、エンティティをAPIレス�
 
 ## 24. N+1問題とその回避
 
-一覧取得後に要素ごとの追加SQLが発行されてしまうN+1問題と、本プロジェクトでの回避方針（`join fetch`とIN句によるまとめ取得の使い分け）を、実際のSQLログとあわせて解説します。
+一覧取得後に要素ごとの追加SQLが発行されてしまうN+1問題について、なぜJPAだと`fetch = LAZY`とプロキシの組み合わせで「うっかり」起きてしまうのかという発生原理から解説します。回避策のカタログ（`join fetch`・IN句・`@EntityGraph`・`@BatchSize`）と本プロジェクトの選択、`join fetch`を1箇所外してN+1を実際に発生させSQL本数を数える実験まで、実測結果とあわせて扱います。
 
 📄 詳細：[07-jpa-performance.md](./07-jpa-performance.md#24-n1問題とその回避)
 

@@ -33,15 +33,240 @@ public class BoardService {
 | `@Service` | このクラスをIoCコンテナに登録するための目印（[3章](./01-architecture.md#3-di依存性注入とiocコンテナ)）。`@Component`の一種で、「Service層のクラスである」という意図を表す |
 | コンストラクタでの`BoardRepository`受け取り | コンストラクタインジェクション（[3章](./01-architecture.md#3-di依存性注入とiocコンテナ)）。IoCコンテナが起動時にRepositoryのBean（[17章](./05-repository.md#17-repository層とspring-data-jpa)）を自動的に渡してくれる |
 
-### `@Transactional(readOnly = true)`の効果
+### 20.1 そもそもトランザクションとは（DBの基礎）
 
-クラス全体に付けている`@Transactional(readOnly = true)`には3つの意味があります。
+> **トランザクションとは？**
+> 「複数の処理をひとまとめにし、全部成功したときだけ確定（コミット）し、途中で失敗したら全部なかったことにする（ロールバックする）」という作業の単位です。中途半端な状態がデータベースに残ることを防ぐための仕組みです。
 
-1. **トランザクション境界の明示**：このクラスの各メソッドの開始から終了までが1つのトランザクションになる。`CardService.search()`はカード本体の取得とラベルの取得で2回SQLを発行しますが（[24章](./07-jpa-performance.md#24-n1問題とその回避)）、1つのトランザクションにまとめることで両者が同じスナップショット（同時点のDBの状態）を見ることになる
-2. **遅延読み込みとの関係**：[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)で解説する`open-in-view=false`の設定下では、トランザクションの範囲＝遅延読み込み（`fetch = LAZY`）が安全に行える範囲です。DTOへの詰め替えをこのトランザクションの中で完了させることで、「トランザクションの外で遅延読み込みに触れて例外になる」という事故を避けています
-3. **読み取り専用の最適化**：`readOnly = true`にすると、Hibernateは更新検知（ダーティチェック。エンティティの変更をSQLとして反映するための仕組み）を省略できます。参照系のメソッドではこの処理自体が不要なので、その分のオーバーヘッドを削減できます
+具体例として、本プロジェクトにはまだ無いが将来追加しうる「カードを1枚作成し、同時に初期ラベルを2件付与する」処理を考えます。素朴に実装すると、SQLは次の3本になります。
 
-**importを間違えやすい注意点**：`@Transactional`という名前のアノテーションはJavaに2種類あります。
+```sql
+INSERT INTO card (board_id, title, status, position, ...) VALUES (...);  -- 1本目：カード本体
+INSERT INTO card_label (card_id, label_id) VALUES (..., 1);              -- 2本目：ラベル付与1件目
+INSERT INTO card_label (card_id, label_id) VALUES (..., 2);              -- 3本目：ラベル付与2件目
+```
+
+もし2本目まで成功し、3本目が失敗（例：存在しない`label_id`を指定してしまい外部キー制約違反になる）したらどうなるでしょうか。トランザクションという仕組みが無ければ、「ラベルが1つしか付いていない中途半端なカード」がそのままDBに残ってしまいます。この3本を1つのトランザクションにまとめておけば、3本目の失敗と同時に1本目・2本目もまとめて取り消され（ロールバック）、「カード自体が存在しない」という処理前の状態に戻ります。
+
+**生SQLでの明示的な書き方と、Springでの対応**
+
+| 生SQL | 役割 | Springでの対応 |
+| --- | --- | --- |
+| `BEGIN` | ここからトランザクション開始 | メソッド呼び出しの開始時（`@Transactional`が検知し自動発行） |
+| （通常のSQL文を複数） | 業務処理そのもの | メソッド内の処理 |
+| `COMMIT` | 全部確定する | メソッドが正常に終了したとき |
+| `ROLLBACK` | 全部取り消す | メソッドが例外を投げて終了したとき |
+
+**ACID（トランザクションが守る4つの性質）を本プロジェクトの言葉で言うと**
+
+| 頭文字 | 正式名 | 本プロジェクトでの意味 |
+| --- | --- | --- |
+| A | Atomicity（原子性） | 上記の「全部成功か全部失敗か」そのもの。中間状態を許さない |
+| C | Consistency（一貫性） | トランザクションの前後でデータの整合性ルールが必ず守られる。本プロジェクトでは`@Check`制約や外部キー制約（[14章](./03-entity-jpa.md#14-dbレベルの制約check)）が、アプリ側のバグに対してもこれを担保する最後の砦になる |
+| I | Isolation（分離性） | 複数のトランザクションが同時に走ったとき、互いの「処理中の内容」がどこまで見えるか。次の20.2で詳しく扱う |
+| D | Durability（永続性） | 一度`COMMIT`したデータは、電源断などが起きても失われない。PostgreSQL自体が保証する領域で、アプリ側で意識することはほぼ無い |
+
+**Springの既定のロールバック規定**：`@Transactional`が例外発生時に自動でロールバックしてくれるのは、`RuntimeException`（非検査例外）と`Error`のみです。検査例外（`Exception`を継承し、コンパイラがtry-catchを強制する例外）は、既定では**ロールバックされずコミットされてしまいます**（Javaの検査例外は「呼び出し元が回復可能」という位置づけのため、Springは「業務的に想定内の結果」と解釈するのが既定動作です）。[23章](#23-例外処理とrestcontrolleradvice)の`ResourceNotFoundException`が`RuntimeException`を継承しているのは、`throws`宣言を省略できるからというだけでなく、投げた瞬間にトランザクションが確実にロールバックされることも理由の1つです。
+
+📄 Laravelとの対比：Eloquentでも`DB::transaction(function () { ... })`のようにクロージャで同じことができ、クロージャ内で例外が投げられると自動でロールバックされる発想は共通です。ただしSpring/Javaでは「例外の型（検査/非検査）によって既定の挙動が変わる」という一段階余分なルールがある点に注意してください。
+
+### 20.2 参照しかしない本プロジェクトで、なぜトランザクションが必要か（分離レベル）
+
+`CardService`のメソッドはどれも参照（SELECT）しかしません。「更新しないなら、そもそもトランザクションなど要らないのでは？」という疑問は自然です。ここでは「複数のSQL文の間に、他の変更が割り込んだらどうなるか」という切り口で考えます。
+
+**同時実行で起きうる3つの異常**
+
+`CardService.search()`は「カード本体を取得するSQL」と「ラベルをまとめて取得するSQL」の2本を発行します（[24章](./07-jpa-performance.md#24-n1問題とその回避)）。この2本の**間**に、もし別の操作がデータを変更したらどうなるでしょうか。
+
+| 異常 | 何が起きるか |
+| --- | --- |
+| ダーティリード（Dirty Read） | 他のトランザクションがまだ`COMMIT`していない、書きかけの値を読んでしまう。後でその変更が`ROLLBACK`されたら、読んだ値は「最初から存在しなかった」ことになる |
+| ノンリピータブルリード（Non-Repeatable Read） | 同じ行を同じトランザクション内で2回読んだのに、1回目と2回目で値が変わっている（間に別のトランザクションがUPDATE/DELETEしてコミットしたため） |
+| ファントムリード（Phantom Read） | 同じ条件のSELECTを2回実行したのに、行の**件数**が変わっている（間に別のトランザクションがINSERT/DELETEしてコミットしたため） |
+
+**分離レベル（Isolation Level）**は、この3つの異常のうちどこまでを許すかを段階的に設定するものです。
+
+| 分離レベル | ダーティリード | ノンリピータブルリード | ファントムリード |
+| --- | --- | --- | --- |
+| READ UNCOMMITTED | 許す | 許す | 許す |
+| READ COMMITTED | 防ぐ | 許す | 許す |
+| REPEATABLE READ | 防ぐ | 防ぐ | 許す（PostgreSQLの実装では実質防ぐ） |
+| SERIALIZABLE | 防ぐ | 防ぐ | 防ぐ |
+
+**本プロジェクトの実際の設定**：`application.properties`・`application-dev.properties`・`docker-compose.yml`のいずれにも分離レベルの指定は無く、PostgreSQLの既定値である**READ COMMITTED**のまま動いています。実際、開発環境の起動ログにもこう出力されています。
+
+```
+Isolation level: READ_COMMITTED [default READ_COMMITTED]
+```
+
+READ COMMITTEDが保証するのは、「各SQL文は、**その文が実行された時点で**コミット済みのデータだけを見る」ことです。つまりダーティリードは起きませんが、ノンリピータブルリードは起き得ます。
+
+> ⚠️ **訂正**：本章では以前「1つのトランザクションにまとめることで、2本のクエリが同じスナップショット（同時点のDBの状態）を見ることになる」と説明していましたが、これはREAD COMMITTEDの下では正確ではありません。READ COMMITTEDは**SQL文ごと**にスナップショットを取り直すため、同じトランザクション内でも2本目のSQLが1本目より後の状態を見る可能性があります。この保証が欲しい場合は`REPEATABLE READ`以上に引き上げる必要があります（20.4節で実際に違いを確認します）。
+
+**では1つのトランザクションにまとめることの本当の効果は何か**。厳密な同時点保証ではなく、次の2点です。
+
+1. 2本のSQLの間でダーティリード（コミット前の中途半端な値）を読む心配が無い
+2. 1つのDBコネクション・1つのHibernateセッション（永続化コンテキスト）に両方のSQLが乗るため、1本目で取得したエンティティ（`card.getBoard()`など）を2本目の処理でもそのまま安全に使い続けられる。コネクションが分かれていれば、そもそも1本目で取得したエンティティを2本目で使い回すこと自体ができない
+
+**なぜREAD COMMITTEDのままで良いのか**：要件定義（[01-overview.md](../requirements/01-overview.md)）に明記されている通り、本アプリは個人利用が前提で「同時に複数人・複数端末から編集する状況を想定しない」。`CardService.search()`の2本のクエリの間に他の変更が割り込む確率はほぼ無視でき、仮に割り込んだとしても「一覧のラベル表示が一瞬だけ古い状態になる」程度で、業務上の破綻にはなりません。将来、複数ユーザー対応（要件定義10章）などでより強い一貫性が必要になったら、`@Transactional(isolation = Isolation.REPEATABLE_READ)`のようにメソッド単位で個別に引き上げられます。
+
+### 20.3 `@Transactional`は「どうやって」効いているのか（AOPプロキシ）
+
+アノテーションを1つ付けるだけで、なぜ`BEGIN`/`COMMIT`/`ROLLBACK`が自動的に挟まるのでしょうか。種明かしをすると、IoCコンテナ（[3章](./01-architecture.md#3-di依存性注入とiocコンテナ)）が実際にBeanとして登録しているのは`CardService`本体ではなく、それを内側に包んだ**プロキシ（代理）オブジェクト**です。`CardController`がコンストラクタインジェクションで受け取っている`cardService`も、実はこのプロキシです。
+
+Springが実行時に自動生成するプロキシは、イメージとしては次のような処理を行います（実際に存在するコードではなく、動作を理解するための疑似コードです）。
+
+```java
+// 実際のコードではない。@Transactionalが実行時に生成する処理のイメージ
+class CardServiceProxy extends CardService {
+	private final CardService target; // 本物のCardService
+
+	@Override
+	public List<CardResponse> search(CardSearchCondition condition) {
+		トランザクション開始(); // BEGIN
+		try {
+			List<CardResponse> result = target.search(condition); // 本物の処理を呼ぶ
+			コミット(); // COMMIT
+			return result;
+		} catch (RuntimeException | Error e) {
+			ロールバック(); // ROLLBACK
+			throw e;
+		}
+	}
+}
+```
+
+この「本体をプロキシで包む」という仕組み（AOP: Aspect Oriented Programming、業務ロジックとは別の関心事を横断的に差し込む技法）から、2つの落とし穴が生まれます。
+
+1. **自己呼び出しには効かない**：クラスの外から`cardService.findById(1)`のように呼べば、必ずプロキシを経由するので`@Transactional`が働きます。しかし、クラス**内部**で`this.toResponses(...)`のように自分自身のメソッドを呼ぶ場合は、プロキシを経由しない直接呼び出しになるため、そのメソッド単体に`@Transactional`を付けても無視されます。`CardService.findById()`が内部で`toResponses()`を呼んでいるのはまさにこの形ですが、`CardService`は**クラス全体**に`@Transactional(readOnly = true)`が付いており、外部から呼ばれる入口（`findById`自体）で既にプロキシ経由のトランザクションが開始済みのため、問題は起きません。もし「`toResponses`だけ個別に`@Transactional`を付けて別扱いにしよう」としても、内部呼び出しである限りその指定は効かない点に注意してください。
+2. **`public`メソッドにしか効かない**：プロキシは対象クラスを継承（またはインターフェースを実装）して差し込むため、`private`メソッドやオーバーライドできない`final`メソッドには適用できません。
+
+**伝播（Propagation）**：`@Transactional`には伝播設定があり、既定値は`REQUIRED`です。「既にトランザクションが開始済みならそれに参加し、無ければ新規に開始する」という意味で、`Controller → Service → 別のService`のように呼び出しが入れ子になっても、`BEGIN`が二重に発行されることはありません（最初に入ったところが唯一の境界になります）。
+
+**`readOnly = true`が実際にしていること**：単に「更新検知を省略する」だけでなく、3つの効果があります。
+
+| 効果 | 内容 |
+| --- | --- |
+| ダーティチェックの省略 | Hibernateの`FlushMode`が変わり、永続化コンテキストが保持するエンティティの「読み込み時点のコピー」と「現在の値」を毎回比較する処理（ダーティチェック）が不要になる |
+| DBへの伝達 | JDBCの`Connection.setReadOnly(true)`が呼ばれ、DBドライバ・DB自体にも「このトランザクションは参照専用」と伝わる（PostgreSQLでは実際に書き込みを行うと明確なエラーになる。20.4節で確認する） |
+| 意図の明示 | コードを読む人に対して「このメソッドは更新を行わない」という設計意図を伝えるドキュメントとしての役割 |
+
+**注意**：`readOnly = true`は「トランザクションを張らない」という意味ではありません。トランザクション自体は通常通り開始されており（20.1の`BEGIN`〜`COMMIT`はそのまま行われる）、その中身が参照専用に制限される、というだけです。
+
+### 20.4 手を動かして確かめる
+
+**① プロキシであることを実際に見る**
+
+`TaskManagementApplication`に一時的な`CommandLineRunner`を追加し、DIコンテナから取り出した`CardService`の実際のクラス名を出力させると、本物の`CardService`ではなくプロキシのクラス名が表示されます。次は本プロジェクトのSpring Boot 4.1.0で実際に確認した結果です。
+
+```
+PROXY_CLASS_NAME=com.tkmedia.taskmanagement.service.CardService$$SpringCGLIB$$0
+```
+
+`$$SpringCGLIB$$0`という部分が、CGLIB（継承によってプロキシを生成する仕組み）によって実行時に生成されたサブクラスであることを示しています。確認用のコードは次の手順で追加・削除してください。
+
+1. `TaskManagementApplication.java`に一時的に以下を追加する
+
+   ```java
+   @Bean
+   CommandLineRunner printProxyClassName(CardService cardService) {
+       return args -> System.out.println("PROXY_CLASS_NAME=" + cardService.getClass().getName());
+   }
+   ```
+
+2. `docker compose logs backend | grep PROXY_CLASS_NAME`で出力を確認する（DevToolsが変更を検知して自動的に再起動し、起動時にログへ出力される）
+3. 確認できたら追加したコードを削除する（`git checkout -- backend/src/main/java/com/tkmedia/taskmanagement/TaskManagementApplication.java`でも戻せる）
+
+**② 分離レベルの違いを実際に体感する**
+
+PostgreSQLコンテナの中で2つのセッション（接続）を使い、片方をトランザクション中のまま、もう片方から別の変更をコミットしてみます。以下は本プロジェクトのシードデータ（`db/seed/dummy-data.sql`。`card_id=1`には`label_id=1,2`の2件が存在する）に対して実際に実行し、結果を確認したものです。
+
+まずREAD COMMITTED（本プロジェクトの既定）の場合。
+
+```bash
+docker compose exec -T db psql -U taskuser -d taskmanagement <<'SQL'
+SHOW transaction_isolation;
+BEGIN;
+SELECT count(*) AS a_first_read FROM card_label WHERE card_id = 1;
+\! psql -U taskuser -d taskmanagement -c "DELETE FROM card_label WHERE card_id = 1 AND label_id = 2;"
+SELECT count(*) AS a_second_read_same_txn FROM card_label WHERE card_id = 1;
+COMMIT;
+SQL
+```
+
+`\!`はpsqlのメタコマンドで、その場でシェルコマンドを実行します。ここではコンテナ内のローカル`psql`を使い、**別セッション**からラベルを1件削除・コミットさせています。実行結果（抜粋）は次の通りでした。
+
+```
+ a_first_read
+--------------
+            2
+(1 row)
+
+DELETE 1
+
+ a_second_read_same_txn
+------------------------
+                      1
+```
+
+同じトランザクションの中にもかかわらず、1回目の読み取り（2件）と2回目の読み取り（1件）で結果が変わりました。これがノンリピータブルリードです。
+
+作業後は必ず元に戻してください。
+
+```bash
+docker compose exec -T db psql -U taskuser -d taskmanagement -c \
+  "INSERT INTO card_label (card_id, label_id) VALUES (1, 2);"
+```
+
+続いてREPEATABLE READで同じ手順を試すと、結果が変わります。
+
+```bash
+docker compose exec -T db psql -U taskuser -d taskmanagement <<'SQL'
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+SELECT count(*) AS a_first_read_rr FROM card_label WHERE card_id = 1;
+\! psql -U taskuser -d taskmanagement -c "DELETE FROM card_label WHERE card_id = 1 AND label_id = 2;"
+SELECT count(*) AS a_second_read_same_txn_rr FROM card_label WHERE card_id = 1;
+COMMIT;
+SQL
+```
+
+```
+ a_first_read_rr
+-----------------
+               2
+
+DELETE 1
+
+ a_second_read_same_txn_rr
+----------------------------
+                          2
+```
+
+トランザクション開始時点のスナップショットが保持されるため、間で別セッションが削除・コミットしても、**同じトランザクションの中では2件のまま**です（`COMMIT`した後に改めて問い合わせると、実際の値である1件が見えるようになります）。忘れずに復元してください。
+
+```bash
+docker compose exec -T db psql -U taskuser -d taskmanagement -c \
+  "INSERT INTO card_label (card_id, label_id) VALUES (1, 2);"
+```
+
+**③ `readOnly`の安全弁を確認する**
+
+```bash
+docker compose exec -T db psql -U taskuser -d taskmanagement <<'SQL'
+BEGIN TRANSACTION READ ONLY;
+UPDATE card SET title = 'x' WHERE id = 1;
+SQL
+```
+
+```
+ERROR:  cannot execute UPDATE in a read-only transaction
+```
+
+`readOnly = true`が単なる気休めの設定ではなく、DBレベルで書き込みを実際に拒否させる仕組みであることが確認できます（`UPDATE`が失敗した時点でエラーになっており、テーブルへの変更は発生していません）。
+
+### importを間違えやすい注意点
+
+`@Transactional`という名前のアノテーションはJavaに2種類あります。
 
 | import元 | `readOnly`属性 |
 | --- | --- |
