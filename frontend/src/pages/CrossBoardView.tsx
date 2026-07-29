@@ -1,37 +1,107 @@
+import { useMemo, useState } from 'react'
+import { apiPaths } from '../api/client'
+import CardDetailModal from '../components/CardDetailModal'
+import CardItem from '../components/CardItem'
+import StatusColumn from '../components/StatusColumn'
+import StatusMessage from '../components/StatusMessage'
+import { useApi } from '../hooks/useApi'
+import { groupCardsByStatusAndBoard } from '../lib/grouping'
+import { STATUSES, STATUS_LABELS } from '../lib/status'
+import type { CardResponse } from '../types/api'
+
 /**
- * 横断ビュー画面（要件定義 docs/requirements/03-screens.md 6章の②）。
- * アプリの初期表示画面で、全ボードのカードを「未着手／作業中／完了」の3列で横断的に見せる。
- *
- * 現時点ではバックエンドAPIと繋いでいないため実データは表示せず、
- * ①Reactが描画できている ②Tailwindのユーティリティクラスが効いている
- * の2点が目視確認できるプレースホルダとして3列のカラム枠だけを用意している。
- * 実データの表示（GET /api/cards の呼び出し）は次セッションで実装する。
+ * 横断ビュー画面（要件定義 docs/requirements/03-screens.md 6章の③）。
+ * アプリの初期表示画面で、全ボードのカードを「未着手／作業中／完了」の3列で
+ * 横断的に見せる。ボード詳細画面（①）と同じ3列の枠組みを保ったまま、
+ * 各列の中身をボード単位でグループ化して表示するのがこの画面の要点
+ * （要件5.4 横断マージビュー）。
  */
 function CrossBoardView() {
-  // 要件定義どおりステータスは固定の3種（自由な列追加はスコープ外）。
-  // 実データ接続後もこの並び順・ラベルをそのまま使う想定。
-  const statuses = ['未着手', '作業中', '完了'] as const
+  // boardIdを指定せずGET /api/cardsを呼ぶと、全ボードのカードが返る
+  // （archived=falseはapiPaths.cards()の中で常に付与される）。
+  const { data: cards, loading, error } = useApi<CardResponse[]>(apiPaths.cards())
+
+  // フラットな配列を「ステータス→ボード→カード」の3階層に組み替える。
+  // 依存配列を[cards]にしているのは、cardsの中身ではなく「配列そのものの
+  // インスタンス」をObject.isで比較するため。useApiのdataはフェッチ完了時にしか
+  // 新しいインスタンスにならないので、モーダルの開閉などで無関係な再レンダリングが
+  // 起きても、そのたびにグルーピングをやり直さずに済む。
+  const grouped = useMemo(() => groupCardsByStatusAndBoard(cards), [cards])
+
+  // 開いているカード詳細モーダルのカードID。nullは「閉じている」を表す。
+  // このstateをApp.tsxではなくこのページ自身が持つのは、モーダルを開く操作
+  // （カードのクリック）がこのページの中でしか起きないため。
+  const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
+
+  /**
+   * 画面の中身（3列 or 状態メッセージ）を組み立てる。
+   * ネストした三項演算子ではなく「上から順に早期returnする」形にすると、
+   * 読み込み中→失敗→0件→正常、という優先順位がそのまま縦に並んで読める。
+   *
+   * これは <RenderContent /> のようなコンポーネントとしてではなく、ただの関数として
+   * 呼び出している（JSXの中で renderContent() のように呼ぶ）。コンポーネントとして
+   * 呼び出す形（<RenderContent />）にすると、Reactが毎レンダリングで「別の型の
+   * コンポーネント」と見なして中身を作り直してしまう（内部にstateがあれば消える）。
+   */
+  function renderContent() {
+    if (loading) return <StatusMessage kind="loading">読み込み中…</StatusMessage>
+    if (error !== null) {
+      return <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
+    }
+    if (cards === null || cards.length === 0) {
+      return <StatusMessage kind="empty">表示できるカードがありません。</StatusMessage>
+    }
+
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        {STATUSES.map((status) => {
+          const boardGroups = grouped[status]
+          return (
+            <StatusColumn
+              key={status}
+              title={STATUS_LABELS[status]}
+              // 列見出しの件数は「ボードごとの件数の合計」。reduceで1つずつ足し込む。
+              count={boardGroups.reduce((sum, group) => sum + group.cards.length, 0)}
+            >
+              {boardGroups.length === 0 ? (
+                <p className="text-xs text-slate-400">カードはまだありません</p>
+              ) : (
+                boardGroups.map((group) => (
+                  // keyはboardId（中身が変わっても揺れないID）を使う。
+                  <div key={group.boardId}>
+                    {/* ▼ はワイヤーフレーム（03-screens.md 6.2③）に合わせた
+                        ボード別セクションの見出し記号。列見出し(h3)の下なのでh4にする。 */}
+                    <h4 className="mb-2 text-xs font-semibold text-slate-500">
+                      ▼ {group.boardName}
+                    </h4>
+                    <div className="flex flex-col gap-2">
+                      {group.cards.map((card) => (
+                        <CardItem
+                          key={card.id}
+                          card={card}
+                          onSelect={(cardId) => setSelectedCardId(cardId)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </StatusColumn>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <section>
       <h2 className="mb-4 text-lg font-semibold">横断ビュー</h2>
-      <p className="mb-4 text-sm text-slate-600">
-        環境構築の動作確認用プレースホルダです。API接続は次セッションで実装します。
-      </p>
-
-      {/* grid-cols-3: 3列固定レイアウト。ステータス列を自由に増減できる設計にはしない
-          （MEMORY: ステータス列は固定にする方針のため、横断ビューでも列を動的生成しない） */}
-      <div className="grid grid-cols-3 gap-4">
-        {statuses.map((status) => (
-          <div
-            key={status}
-            className="rounded-lg border border-slate-300 bg-white p-4 shadow-sm"
-          >
-            <h3 className="mb-2 font-medium">{status}</h3>
-            <p className="text-xs text-slate-400">カードはまだありません</p>
-          </div>
-        ))}
-      </div>
+      {renderContent()}
+      {/* selectedCardIdがnullのときCardDetailModalは何も描画しない(return null)。
+          「開いているときだけ<CardDetailModal>をJSXに書く」のではなく、常に置いて
+          cardIdの値で開閉を制御しているのは、モーダルの内部stateをReactに
+          維持させ続けるため（都度マウント/アンマウントを避ける）。 */}
+      <CardDetailModal cardId={selectedCardId} onClose={() => setSelectedCardId(null)} />
     </section>
   )
 }

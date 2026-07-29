@@ -20,7 +20,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* strict: true は複数のチェックをまとめて有効化するフラグで、その中でも特に
+       strictNullChecks（null/undefinedを型で区別する）が今回のAPI連携の前提になる。
+       これが無いと `T | null` の `null` が型上消えてしまい、
+       「読み込み中」「失敗」「データあり」の3状態をコンパイラがチェックしてくれなくなる。 */
+    "strict": true
   },
   "include": ["src"]
 }
