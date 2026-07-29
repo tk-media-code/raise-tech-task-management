@@ -122,11 +122,23 @@ export const apiPaths = {
   /**
    * カード一覧（絞り込み）。
    * URLSearchParamsを使うのは、値に含まれる記号（&や日本語など）を自動でURLエンコードしてくれるため。
-   * 文字列連結で組み立てると、将来キーワード検索を足したときに壊れる。
+   * 文字列連結で組み立てると、キーワード検索（日本語や記号を含み得る）で簡単に壊れる。
+   *
+   * @param params.boardId   指定したボードのカードのみに絞り込む（横断ビュー・検索画面では省略）
+   * @param params.keyword   タイトル・説明への部分一致キーワード（要件5.8）。空文字はパラメータ自体を省略する
+   * @param params.labelIds  ラベルによる絞り込み（要件5.8）。バックエンドはOR条件（いずれか1つでも
+   *                         付いていればヒット）で実装済み。カンマ区切りの1パラメータにまとめて渡す
+   *                         （`?labelIds=1&labelIds=2`形式もバックエンドは受け付けるが、
+   *                         URLへの反映のしやすさ＝pages/SearchView.tsxのURLクエリと1対1にできるため
+   *                         こちらの形にしている）
    */
-  cards: (params: { boardId?: number | string } = {}) => {
+  cards: (params: { boardId?: number | string; keyword?: string; labelIds?: number[] } = {}) => {
     const query = new URLSearchParams()
     if (params.boardId !== undefined) query.set('boardId', String(params.boardId))
+    if (params.keyword !== undefined && params.keyword !== '') query.set('keyword', params.keyword)
+    if (params.labelIds !== undefined && params.labelIds.length > 0) {
+      query.set('labelIds', params.labelIds.join(','))
+    }
     // archivedはバックエンド側の既定値もfalseだが、あえて明示する。
     // 「アーカイブ済みは表示しない」は画面の仕様（要件5.7）であって、
     // サーバーの既定値に暗黙で依存すべきではないため。
@@ -136,4 +148,7 @@ export const apiPaths = {
 
   /** カード1件（アーカイブ済みかどうかを問わず取得できる） */
   card: (cardId: number | string) => `/api/cards/${cardId}`,
+
+  /** 指定ボードのラベル一覧（検索画面のラベル絞り込みUIで、ボードごとにグループ化する際に使う） */
+  boardLabels: (boardId: number | string) => `/api/boards/${boardId}/labels`,
 }
