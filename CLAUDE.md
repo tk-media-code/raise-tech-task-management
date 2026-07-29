@@ -32,11 +32,16 @@
 4. **新規実装だけでなく既存コードも対象。** 新しい概念を含むファイルを追加・変更する際、近傍の未コメントの既存コードに手を入れる場合は、あわせてコメントを補うことが望ましい。
 5. コメントは`javac`のコンパイル時にすべて破棄されるため、ビルド成果物（`.class`・JAR）には残らない。除去のための追加設定は不要。
 
-## 学習ドキュメント（Spring Boot・Java）
+## 学習ドキュメント
 
-Spring Boot自体の理解を深めるための学習ドキュメントを [docs/spring-boot/](./docs/spring-boot/README.md) に整備している。**実装で新しい概念・技術要素（例：Repository、Service、DTO、バリデーション、例外処理、認証など）が登場したら、都度このドキュメント群を更新すること**をルールとする。更新方法は[docs/spring-boot/README.mdの更新ルール](./docs/spring-boot/README.md#このドキュメントの更新ルール)を参照。
+ユーザーはバックエンド（Spring Boot / Java）・フロントエンド（React / TypeScript）ともに実戦経験が浅く、開発と並行して学習を進めている。そのため、フレームワーク・言語ごとに学習ドキュメントを整備し、**実装で新しい概念・技術要素が登場したら、都度対応するドキュメント群を更新すること**をルールとする。
 
-Java**言語**自体（本プロジェクトの実装を理解するために必要な範囲に限る）の学習ドキュメントは [docs/java/](./docs/java/README.md) に整備している。実装で新しいJavaの言語機能（例：ジェネリクス、ラムダ式、record、例外処理など）が登場したら、同様に都度このドキュメント群を更新する。更新方法は[docs/java/README.mdの更新ルール](./docs/java/README.md#このドキュメントの更新ルール)を参照。フレームワークの使い方（Spring Boot）と言語自体の文法（Java）のどちらの話か迷ったときは、前者を`docs/spring-boot/`、後者を`docs/java/`に書き分ける。
+- Spring Boot自体の理解を深めるための学習ドキュメントは [docs/spring-boot/](./docs/spring-boot/README.md) に整備している（例：Repository、Service、DTO、バリデーション、例外処理、認証など）。更新方法は[docs/spring-boot/README.mdの更新ルール](./docs/spring-boot/README.md#このドキュメントの更新ルール)を参照。
+- Java**言語**自体（本プロジェクトの実装を理解するために必要な範囲に限る）の学習ドキュメントは [docs/java/](./docs/java/README.md) に整備している（例：ジェネリクス、ラムダ式、record、例外処理など）。更新方法は[docs/java/README.mdの更新ルール](./docs/java/README.md#このドキュメントの更新ルール)を参照。
+- Reactというライブラリ・周辺ツール（React Router、Vite、Tailwind CSSなど）の使い方の学習ドキュメントは [docs/react/](./docs/react/README.md) に整備している（例：コンポーネント、フック、ルーティング、状態管理など）。更新方法は[docs/react/README.mdの更新ルール](./docs/react/README.md#このドキュメントの更新ルール)を参照。
+- TypeScript**言語**自体（本プロジェクトの実装を理解するために必要な範囲に限る。TypeScriptはJavaScriptのスーパーセットのため、必要な範囲のJavaScript構文・ブラウザAPIも含む）の学習ドキュメントは [docs/typescript/](./docs/typescript/README.md) に整備している（例：ジェネリクス、ユニオン型、非同期処理など）。更新方法は[docs/typescript/README.mdの更新ルール](./docs/typescript/README.md#このドキュメントの更新ルール)を参照。
+
+フレームワーク・ライブラリの使い方と言語自体の文法のどちらの話か迷ったときは、バックエンドは前者を`docs/spring-boot/`・後者を`docs/java/`に、フロントエンドは前者を`docs/react/`・後者を`docs/typescript/`に書き分ける。
 
 ## 参考ドキュメント
 
@@ -44,3 +49,5 @@ Java**言語**自体（本プロジェクトの実装を理解するために必
 - [docs/requirements.md](./docs/requirements.md) — 要件定義書（ハブ）
 - [docs/spring-boot/README.md](./docs/spring-boot/README.md) — Spring Boot 学習ドキュメント（アーキテクチャ・各ファイルの役割）
 - [docs/java/README.md](./docs/java/README.md) — Java言語 学習ドキュメント（本プロジェクトの実装に登場する範囲のJava文法）
+- [docs/react/README.md](./docs/react/README.md) — React 学習ドキュメント（コンポーネント・フック・ルーティングなど）
+- [docs/typescript/README.md](./docs/typescript/README.md) — TypeScript言語 学習ドキュメント（本プロジェクトの実装に登場する範囲のTypeScript・JavaScript文法）
