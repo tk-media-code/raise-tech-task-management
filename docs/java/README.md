@@ -4,6 +4,7 @@
 > Spring Bootというフレームワークの使い方は[docs/spring-boot/](../spring-boot/README.md)で扱っており、こちらはその土台となるJava言語自体の文法・構文を対象にします。
 > あくまで**本プロジェクトの実装を理解するために必要な範囲**に絞っており、実装に登場しない言語機能（歴史的経緯や、Spring Bootでの開発に不要な文法など）は扱いません。
 > プログラミング言語自体の学習経験があり、HTML/CSS/JavaScriptの基礎知識、PHP（Laravelアプリのフロントエンド保守）の経験がある方を読者として想定し、必要に応じてJavaScript・PHPとの対比を添えています。
+> フロントエンド（React + TypeScript）の学習ドキュメントは [docs/react/](../react/README.md)・[docs/typescript/](../typescript/README.md) に整備しています。
 
 ### 本書の構成
 
