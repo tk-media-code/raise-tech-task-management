@@ -38,4 +38,18 @@ public interface LabelRepository extends JpaRepository<Label, Integer> {
 	// 「IDは実在するが、このボードのものではない」ラベルは戻り値に含まれなくなり、
 	// CardService側で「要求した件数 と 実際に見つかった件数 の不一致」として検出できるようになる。
 	List<Label> findByBoardIdAndIdIn(Integer boardId, Collection<Integer> ids);
+
+	/**
+	 * 指定したボードに、指定した名前のラベルが既に存在するかを判定する。
+	 * ラベル新規作成時、同一ボード内での名前の重複を弾くために使う
+	 * （DBには(board_id, name)のUNIQUE制約を設けていないため、アプリ層でのチェックが必要）。
+	 *
+	 * @param boardId 絞り込み対象のボードID
+	 * @param name    重複を確認したいラベル名（呼び出し側でtrim済みのものを渡す）
+	 * @return 同名のラベルが既に存在すればtrue
+	 */
+	// existsByBoardIdAndName という名前は「board_id = ? and name = ?」の完全一致条件に
+	// 機械的に変換される。count(*) > 0 相当のSQLになるため、findByBoardIdAndIdInのように
+	// 一覧を取得してJava側でsizeを比較するより、DBに存在確認だけを行わせる分軽量になる。
+	boolean existsByBoardIdAndName(Integer boardId, String name);
 }

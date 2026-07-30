@@ -2,9 +2,11 @@ package com.tkmedia.taskmanagement.service;
 
 import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
+import com.tkmedia.taskmanagement.dto.LabelCreateRequest;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.entity.Board;
 import com.tkmedia.taskmanagement.entity.Label;
+import com.tkmedia.taskmanagement.exception.InvalidRequestException;
 import com.tkmedia.taskmanagement.exception.ResourceNotFoundException;
 import com.tkmedia.taskmanagement.repository.BoardRepository;
 import com.tkmedia.taskmanagement.repository.LabelRepository;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * ボードに関する業務ロジックを担うService。
@@ -35,6 +38,16 @@ public class BoardService {
 
 	private final BoardRepository boardRepository;
 	private final LabelRepository labelRepository;
+
+	// ラベル作成時に選べる色のプリセットパレット（要件定義5.5「あらかじめ用意された色パレットから
+	// 色を選び」）。値はprototype/app.jsのLABEL_COLORS・db/seed/dummy-data.sqlの初期ラベルと
+	// 揃えてある。フロントエンド（frontend/src/lib/labelColors.ts）にも同じ8色を持たせており、
+	// 両者がずれると「フロントで選べた色がバックエンドで拒否される（400）」という食い違いが起きる
+	// ため、変更する際は両方合わせて直すこと。CardServiceのINITIAL_STATUSと同じく、
+	// 使う場所（このクラスのcreateLabel）にだけ持たせるprivate static finalの定数にしている。
+	private static final Set<String> ALLOWED_LABEL_COLORS = Set.of(
+			"#e74c3c", "#e67e22", "#f1c40f", "#2ecc71",
+			"#3498db", "#9b59b6", "#e84393", "#7f8c8d");
 
 	// コンストラクタインジェクション。IoCコンテナ（ApplicationContext）が起動時に
 	// BoardRepository・LabelRepositoryのBeanをここへ自動的に渡してくれる
@@ -108,6 +121,46 @@ public class BoardService {
 		// createdAtはBoardエンティティの@CreationTimestampがINSERT時に自動でセットするため、
 		// ここでは何もしない。
 		Board saved = boardRepository.save(board);
+		return toResponse(saved);
+	}
+
+	/**
+	 * 指定ボードにラベルを新規作成する。
+	 *
+	 * @param boardId 所属させるボードのID
+	 * @param request 作成内容（ラベル名・色）
+	 * @return 作成したラベルのDTO
+	 * @throws ResourceNotFoundException 指定ボードが存在しない場合
+	 * @throws InvalidRequestException   色がパレットに含まれない、または同一ボード内に同名のラベルが
+	 *                                   既に存在する場合
+	 */
+	// CardService.createと同じく、findById().orElseThrow()でボードの存在確認とエンティティの
+	// 取得を1回で済ませる（後段でlabel.setBoard(board)にそのまま使うエンティティが要るため、
+	// findLabelsByBoardIdのexistsByIdだけで済ませる書き方はここでは採れない）。
+	@Transactional
+	public LabelResponse createLabel(Integer boardId, LabelCreateRequest request) {
+		Board board = boardRepository.findById(boardId)
+				.orElseThrow(() -> new ResourceNotFoundException("ボードが見つかりません（id=" + boardId + "）"));
+
+		// 検証の順序は「DBを見なくても分かる形式的な不正」→「DBを見ないと分からない制約」の順にする。
+		// パレット外の色は明らかに無意味な値なので、わざわざ重複チェックのSQLを発行する前に弾く。
+		if (!ALLOWED_LABEL_COLORS.contains(request.color())) {
+			throw new InvalidRequestException("許可されていない色です");
+		}
+		// nameは@NotBlankで「空白のみ」は弾かれているが、前後の空白そのものは除去されないため、
+		// ここでtrimする（BoardCreateRequestのnameと同じ理由）。重複チェックもこのtrim後の値で行う。
+		String name = request.name().trim();
+		// DBの(board_id, name)にUNIQUE制約は設けていない（LabelRepository.existsByBoardIdAndName
+		// のJavadoc参照）ため、アプリ層でのこのチェックが唯一の防衛線になる。
+		if (labelRepository.existsByBoardIdAndName(boardId, name)) {
+			throw new InvalidRequestException("同じ名前のラベルが既に存在します");
+		}
+
+		Label label = new Label();
+		label.setBoard(board);
+		label.setName(name);
+		label.setColor(request.color());
+		Label saved = labelRepository.save(label);
 		return toResponse(saved);
 	}
 

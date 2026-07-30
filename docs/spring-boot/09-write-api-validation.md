@@ -364,4 +364,49 @@ return toResponses(List.of(saved)).get(0);
 
 ---
 
+## 32. アプリケーション層での重複・許可値チェック
+
+ラベル新規作成（要件定義5.5、`POST /api/boards/{id}/labels`）の`BoardService.createLabel`には、これまでの`create`系メソッドには無かった2種類の検証が登場します。
+
+```java
+if (!ALLOWED_LABEL_COLORS.contains(request.color())) {
+	throw new InvalidRequestException("許可されていない色です");
+}
+String name = request.name().trim();
+if (labelRepository.existsByBoardIdAndName(boardId, name)) {
+	throw new InvalidRequestException("同じ名前のラベルが既に存在します");
+}
+```
+
+どちらも[29章](#29-リクエストdtoとbean-validation)の`@NotBlank`・`@Size`では表現できません。「色が空でないか」「名前が空でないか」という**形式**はBean Validation（`LabelCreateRequest`）が担いますが、「その色が既定パレットに含まれるか」「その名前が同じボード内で重複していないか」は、アプリケーションが持つデータ（許可リスト・DBの既存行）と突き合わせないと判定できない**業務ルール**であり、[31章](#31-登録処理の中身)で見た`InvalidRequestException`の出番です。`CardService.create`のラベルID存在チェック（[30章](#30-バリデーションエラーを400で返す)の表）と同じ切り分け方の3つ目の実例になります。
+
+### なぜDBのUNIQUE制約を使わないのか
+
+「同一ボード内でラベル名を重複させない」だけなら、DB側に`(board_id, name)`のUNIQUE制約を張る選択肢もあります。今回はそちらを採らず、`existsByBoardIdAndName`によるアプリ層のチェックだけにしました。
+
+```java
+boolean existsByBoardIdAndName(Integer boardId, String name);
+```
+
+理由は2つあります。
+
+1. **エラーの質**：UNIQUE制約違反はDBが`DataIntegrityViolationException`（Spring Data JPAが変換する汎用の例外）としてはじき返します。`GlobalExceptionHandler`にはこの例外専用のハンドラが無いため、素通りすれば意図しない500（内部サーバーエラー）としてクライアントに返ってしまいます。事前にアプリ層で確認し、`InvalidRequestException`という「何が悪かったかを言葉で説明できる」例外に変換してから返す方が、フロントエンドにとって扱いやすいレスポンスになります。
+2. **`ddl-auto=update`との相性**：本プロジェクトのスキーマは`spring.jpa.hibernate.ddl-auto=update`（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)）でエンティティから自動生成されています。`update`モードは新しいテーブル・カラムの追加には対応しますが、既存テーブルへの制約追加を確実に行うとは限りません。`@Table(uniqueConstraints = ...)`をエンティティに書き足しても、既に起動済みの環境ではDB側の制約が反映されない可能性があります（`BoardCreateRequest`のクラスコメントに書かれている、ボード名の一意制約をあえて設けていない理由とも共通する注意点です）。
+
+この2点から、**「重複を防ぐ」という目的そのものはDB制約でもアプリ層でも達成できますが、「防いだ結果をどう利用者に伝えるか」まで含めて考えると、今回はアプリ層でのチェックの方が実装コストに見合う**と判断しました。この判断はデータの整合性を100%保証するものではありません（同時に2件の作成リクエストが飛べば、`existsByBoardIdAndName`のSELECTと`save()`のINSERTの間ですり抜けが起きる可能性があります）。CardService・BoardServiceのposition採番が抱えているのと同じ種類のレースコンディションで、個人利用アプリの規模では許容する、という既存の割り切り（[31章](#31-登録処理の中身)）に揃えています。
+
+### プリセットパレットをどこに持たせるか
+
+色の許可リストは、`CardService.INITIAL_STATUS`（[31章](#31-登録処理の中身)）と同じ考え方で、使う場所（`BoardService`）に閉じた`private static final`定数として持たせています。
+
+```java
+private static final Set<String> ALLOWED_LABEL_COLORS = Set.of(
+		"#e74c3c", "#e67e22", "#f1c40f", "#2ecc71",
+		"#3498db", "#9b59b6", "#e84393", "#7f8c8d");
+```
+
+この8色はフロントエンドの`frontend/src/lib/labelColors.ts`にも同じ値・同じ順序で存在します（[docs/react/08-form-and-mutation.md 21章](../react/08-form-and-mutation.md#21-フォームの中でネストした作成を行う)参照）。2箇所に同じ値を重複して持たせているのは、本プロジェクトがまだ「バックエンドとフロントエンドで定数を共有する仕組み」（例：OpenAPIからの型生成）を持っていないためで、値がずれた場合は「フロントで選べた色がバックエンドで拒否される（400）」という形で気づける、という程度の緩い保証にとどまります。
+
+---
+
 *本ドキュメントは開発と並行して育てていく学習ノートです。実装で分からない概念が出てきたら、まずここに解説がないか確認し、無ければ追記してください。*
