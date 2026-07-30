@@ -24,7 +24,7 @@
 | 13〜14章 | React Routerによるルーティング | [05-router.md](./05-router.md) |
 | 15章 | コンポーネント設計と状態の持ち方 | [06-component-design.md](./06-component-design.md) |
 | 16〜17章 | npm・Viteとビルド周りの設定 | [07-build-tooling.md](./07-build-tooling.md) |
-| 18〜20章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
+| 18〜21章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
 
 ## 目次
 
@@ -48,6 +48,7 @@
 18. [フォームの実装](./08-form-and-mutation.md#18-フォームの実装)
 19. [書き込み（POST）とデータの更新](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
 20. [`useRef`とDOMへの直接アクセス](./08-form-and-mutation.md#20-userefとdomへの直接アクセス)
+21. [フォームの中でネストした作成を行う](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)
 
 ---
 
@@ -208,6 +209,14 @@
 フォームを開いた瞬間にタイトル入力欄へ自動でフォーカスを当てる実装を教材に、`useRef`と`useState`の違い（値の変化が再描画を引き起こすかどうか）、`useEffect`の中でDOM操作を行う理由を解説します。
 
 📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#20-userefとdomへの直接アクセス)
+
+---
+
+## 21. フォームの中でネストした作成を行う
+
+ラベルの新規作成（要件定義5.5）を教材に、カード作成フォームの中にもう1つの作成フォーム（ラベル作成）を組み込む実装を解説します。HTMLの`<form>`は入れ子にできないため`onClick`/`onKeyDown`から直接呼び出す設計にしたこと、同じ`useCreate`を型引数だけ変えて2回呼び出し送信中・エラーを独立させたこと、作成した子リソース（ラベル）を親フォームの保留中state（`selectedLabelIds`）へ反映する設計、`ColorSwatchPicker`という新しいcontrolledコンポーネントを扱います。
+
+📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)
 
 ---
 

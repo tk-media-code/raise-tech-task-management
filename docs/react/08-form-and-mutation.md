@@ -251,3 +251,122 @@ return <input ref={titleInputRef} type="text" /* ... */ />
 ### なぜ`useEffect`の中で呼ぶのか
 
 `titleInputRef.current?.focus()`を、フォームを開くボタンの`onClick`ハンドラの中で直接呼ぶことはできません。ボタンが押された時点（`setOpen(true)`を呼んだ直後）では、まだ折りたたみ状態のUIが描画されており、展開後の`<input>`はDOMにまだ存在しないためです。`useEffect`は「描画（DOMの更新）が終わった**後**に実行される」という性質（[03-state-effect.md 8章](./03-state-effect.md#8-useeffectと副作用クリーンアップ)）を持つため、依存配列に`open`を指定した`useEffect`の中でなら、`open`が`true`になり実際に`<input>`がDOMに現れた直後というタイミングで、確実に`focus()`を呼べます。
+
+---
+
+## 21. フォームの中でネストした作成を行う
+
+要件定義5.5「ラベル管理」に対応するため、`components/CardCreateForm.tsx`（カード新規作成フォーム）の中に、もう1つの小さな作成フォーム（ラベルの新規作成）を組み込みました。「フォームの中にフォームがある」入れ子の構造は本プロジェクト初めてで、これまでの章の考え方をいくつか組み合わせて実現しています。
+
+### `<form>`は入れ子にできない
+
+HTMLの`<form>`要素は仕様上、他の`<form>`の内側に置けません（ブラウザは無視するか、開発者が意図しない形にパースします）。カード作成フォームは既に`<form onSubmit={handleSubmit}>`なので、ラベル作成を2つ目の`<form>`として素直に書くことはできません。
+
+```tsx
+// 採れない書き方（<form>の中に<form>を書くことになってしまう）
+<form onSubmit={handleSubmit}>
+  {/* ... */}
+  <form onSubmit={handleCreateLabel}>{/* ... */}</form>
+</form>
+```
+
+代わりに、ラベル作成は`onSubmit`を持たないただの関数として実装し、「作成」ボタンの`onClick`と、ラベル名欄での`Enter`キー（`onKeyDown`）の2箇所から直接呼び出す形にしました。
+
+```tsx
+async function handleCreateLabel() {
+  const created = await createLabel({ name: newLabelName.trim(), color: newLabelColor })
+  if (created === null) return
+  refetchLabels()
+  setSelectedLabelIds((current) => [...current, created.id])
+  setNewLabelName('')
+  setLabelCreatorOpen(false)
+}
+```
+
+```tsx
+<button type="button" onClick={handleCreateLabel} disabled={newLabelName.trim() === '' || creatingLabel}>
+  {creatingLabel ? '作成中…' : '作成'}
+</button>
+```
+
+ここで`type="button"`が欠かせません。[18章](#18-フォームの実装)で見たとおり、`<form>`の中にある`<button>`は`type`を省略すると既定で`type="submit"`として扱われ、クリックのたびに**外側のカード作成フォーム**が送信されてしまいます。ラベル作成ボタン・色スウォッチ（`ColorSwatchPicker`の各ボタン）・ラベル作成のキャンセルボタンは、すべて明示的に`type="button"`を指定しています。
+
+### Enterキーの向き先を明示する
+
+同じ理由で、ラベル名の入力欄で`Enter`を押したときの挙動にも注意が必要です。`<input>`は同じ`<form>`の中にある限り、何もしなければ`Enter`キーでその`<form>`の`onSubmit`（＝カード作成）を発火させてしまいます。
+
+```tsx
+<input
+  type="text"
+  value={newLabelName}
+  onChange={(event) => setNewLabelName(event.target.value)}
+  onKeyDown={(event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault() // ← これが無いと外側の<form>のonSubmitが発火してしまう
+      void handleCreateLabel()
+    }
+  }}
+/>
+```
+
+`event.preventDefault()`を呼んでから`handleCreateLabel()`を呼ぶことで、「このEnterはラベル作成に向けたものだ」とReactに伝えています。1つの`<form>`の中に「カードを送信する」「ラベルを作成する」という2つの送信意図が同居しているからこそ、Enterキーの向き先をどちらにするかをコードで明示しなければならない、という`<form>`1つだけの単純な構成では出てこなかった問題です。
+
+### 2つ目の`useCreate`——送信中・エラーを独立させる
+
+`CardCreateForm`は[19章](#19-書き込みpostとデータの更新)の`useCreate`を、型引数を変えて2回呼び出しています。
+
+```tsx
+const { create, submitting, error } =
+  useCreate<CardCreateRequest, CardResponse>(apiPaths.createCard())
+
+const { create: createLabel, submitting: creatingLabel, error: labelError } =
+  useCreate<LabelCreateRequest, LabelResponse>(apiPaths.boardLabels(boardId))
+```
+
+同じフックを同じコンポーネントの中で2回呼ぶこと自体は、[9章](./03-state-effect.md#9-フックのルール)の「フックのルール」に反しません（ループや条件分岐の中で呼ばない限り、フックは何度でも呼べます）。分割代入の変数名を`create`→`createLabel`、`submitting`→`creatingLabel`のように**別名で受け取る**ことで、1つのコンポーネントの中に「カード送信用の状態」と「ラベル作成用の状態」という2組の`submitting`/`error`が、互いに独立して存在できます。もし1つの`useCreate`を使い回そうとすると、ラベル作成中はカードの送信ボタンまで`submitting`扱いになってしまう（またはその逆）という、意図しない結合が生まれていたはずです。
+
+### 子リソースの作成結果を、親の保留中stateへ反映する
+
+ラベルは作成した瞬間、そのラベルが「今まさに作成しようとしているカード」に自動で付与されます（プロトタイプの`card.labelIds.push(label.id)`と同じ意図）。ただし本実装では、まだカード自体が存在しない（サーバーに送信する前）段階でこれを行う必要があります。
+
+```tsx
+const created = await createLabel({ name: newLabelName.trim(), color: newLabelColor })
+if (created === null) return
+
+refetchLabels()
+setSelectedLabelIds((current) => [...current, created.id])
+```
+
+`selectedLabelIds`は「送信予定のラベルID一覧」を持つ、カード作成フォーム側のstate（[18章](#18-フォームの実装)）です。ラベルの作成に成功した直後、その`created.id`をこのstateへ追記することで、既存ラベルをチップでトグル選択したとき（`handleToggleLabel`）とまったく同じ経路で「選択済み」の扱いになります。子リソース（ラベル）を作ってすぐ親の入力state（`selectedLabelIds`）に書き戻す、という一手間を挟むことで、「ラベルを作る」と「そのラベルをカードに付ける」という2つの操作が、利用者からは1回のクリックで完了したように見えます。
+
+`refetchLabels()`（[19章](#19-書き込みpostとデータの更新)の`refetch`と同じ仕組み）も同時に呼んでいるのは、選択チップの一覧（`labels`）自体を最新化するためです。`selectedLabelIds`と`labels`は別々のstateなので、どちらを先に呼んでも結果は変わりません。
+
+### ラベルが1件も無いボードでも、作成の入り口を隠さない
+
+ラベル欄のJSXには、`labels.length > 0`という条件が2箇所に分かれて登場します。
+
+```tsx
+{labels !== null && (
+  <div>
+    {labels.length > 0 && (
+      <div>{/* 既存ラベルの選択チップ */}</div>
+    )}
+    {/* ＋ 新しいラベルを作成 は常にここに描画する（labels.length > 0の外側） */}
+  </div>
+)}
+```
+
+「選択できる既存ラベルが無いなら、選択チップの行自体を出さない」という判断はそのままですが、「＋ 新しいラベルを作成」の導線まで同じ条件に含めてしまうと、**ラベルが1枚も無いボードで最初のラベルを作る手段が無くなってしまいます**。[06-component-design.md](./06-component-design.md#15-コンポーネント設計と状態の持ち方)や本ファイル冒頭（[18章](#18-フォームの実装)）で繰り返し出てくる「0件だからといって機能への入り口まで消してはいけない」という判断基準が、ここでも同じ形で当てはまります。
+
+### `ColorSwatchPicker`——もう1つのcontrolledコンポーネント
+
+色の選択肢は`components/ColorSwatchPicker.tsx`という新しいコンポーネントに切り出しました。選択状態（`selectedColor`）も選択時の処理（`onSelect`）も自分では持たず、すべて親からpropsで受け取る「controlled」なコンポーネントです。
+
+```tsx
+type Props = {
+  selectedColor: string
+  onSelect: (color: string) => void
+}
+```
+
+これは[4章](./02-component-jsx.md#4-propsと型付け)で見た`LabelToggleChip`（選択状態を`selected`propsで受け取り、`onToggle`で親に通知する）と同じ設計です。「選択されている色は何か」という情報を`ColorSwatchPicker`自身の内部stateに持たせなかったのは、そうすると親（`CardCreateForm`）が「今choose中の色」を知るために`ColorSwatchPicker`の内部を覗く手段が必要になってしまうからです。選択状態を常に親のstate（`newLabelColor`）という1箇所だけに置き、`ColorSwatchPicker`は「今の値を表示し、クリックされたら親に伝える」だけの薄い層に徹しています。

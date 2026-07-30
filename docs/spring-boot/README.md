@@ -25,7 +25,7 @@
 | 20〜23章 | Service層・Controller層・DTO・例外処理 | [06-service-controller.md](./06-service-controller.md) |
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
-| 28〜31章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
+| 28〜32章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
 
 ## 目次
 
@@ -60,6 +60,7 @@
 29. [リクエストDTOとBean Validation](./09-write-api-validation.md#29-リクエストdtoとbean-validation)
 30. [バリデーションエラーを400で返す](./09-write-api-validation.md#30-バリデーションエラーを400で返す)
 31. [登録処理の中身](./09-write-api-validation.md#31-登録処理の中身)
+32. [アプリケーション層での重複・許可値チェック](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)
 
 ---
 
@@ -308,6 +309,14 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 書き込み側の`@Transactional`によるクラス既定`readOnly=true`の上書き、`@CreationTimestamp`/`@UpdateTimestamp`と`@ColumnDefault`の役割分担（`@ColumnDefault`だけではNOT NULL制約違反になる実例）、positionの採番方法、`findById`と`getReferenceById`の使い分け、複合主キーエンティティの`save()`が`persist`か`merge`かを決める`isNew()`の仕組みを解説します。
 
 📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#31-登録処理の中身)
+
+---
+
+## 32. アプリケーション層での重複・許可値チェック
+
+ラベル新規作成（要件定義5.5）を教材に、Bean Validationでは表現できない2種類の検証（色が既定パレットに含まれるか、名前が同一ボード内で重複していないか）を`InvalidRequestException`で400として返す実装を解説します。DBのUNIQUE制約を使わずアプリ層でチェックする理由（`DataIntegrityViolationException`用ハンドラが無いこと、`ddl-auto=update`が既存テーブルへの制約追加を保証しないこと）も扱います。
+
+📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)
 
 ---
 

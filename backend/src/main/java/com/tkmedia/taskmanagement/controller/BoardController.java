@@ -2,6 +2,7 @@ package com.tkmedia.taskmanagement.controller;
 
 import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
+import com.tkmedia.taskmanagement.dto.LabelCreateRequest;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.service.BoardService;
 import jakarta.validation.Valid;
@@ -78,5 +79,23 @@ public class BoardController {
 	public ResponseEntity<BoardResponse> create(@Valid @RequestBody BoardCreateRequest request) {
 		BoardResponse created = boardService.create(request);
 		return ResponseEntity.created(URI.create("/api/boards/" + created.id())).body(created);
+	}
+
+	/**
+	 * 指定ボードにラベルを新規作成する（要件定義5.5 ラベル管理）。
+	 *
+	 * @param id      ボードID
+	 * @param request リクエストボディ（ラベル名・色）。{@code @Valid}によりBean Validationが
+	 *                このメソッドの実行前に検証する（create（ボード作成）と同じ仕組み）
+	 * @return 作成したラベル（HTTPステータス201）。ボードが存在しなければ404、色がパレット外・
+	 *         同名ラベルが既に存在する場合は400（いずれもServiceが投げた例外をGlobalExceptionHandlerが変換）
+	 */
+	@PostMapping("/{id}/labels")
+	public ResponseEntity<LabelResponse> createLabel(
+			@PathVariable Integer id, @Valid @RequestBody LabelCreateRequest request) {
+		LabelResponse created = boardService.createLabel(id, request);
+		// ラベル単体を返すGETエンドポイント（/api/boards/{id}/labels/{labelId}相当）が無いため、
+		// Locationは代わりに一覧取得エンドポイント（listLabelsと同じURL）を指す。
+		return ResponseEntity.created(URI.create("/api/boards/" + id + "/labels")).body(created);
 	}
 }

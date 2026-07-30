@@ -113,3 +113,15 @@ export type CardCreateRequest = {
 export type BoardCreateRequest = {
   name: string
 }
+
+/**
+ * ラベル新規作成API（{@code POST /api/boards/{id}/labels}}）のリクエストボディ。
+ * バックエンド: backend/.../dto/LabelCreateRequest.java
+ *
+ * colorは自由入力ではなく、`lib/labelColors.ts`のLABEL_COLORSから選んだ値をそのまま送る
+ * （既定パレット外の値を送ってもバックエンドが400で拒否する）。
+ */
+export type LabelCreateRequest = {
+  name: string
+  color: string
+}
