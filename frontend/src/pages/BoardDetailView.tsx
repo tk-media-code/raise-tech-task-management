@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { apiPaths } from '../api/client'
+import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
 import CardItem from '../components/CardItem'
 import StatusColumn from '../components/StatusColumn'
@@ -17,7 +18,7 @@ import type { CardResponse } from '../types/api'
  * 挟まず、カードをそのままステータス列に並べる点が違う。
  *
  * ドラッグ＆ドロップによるステータス変更（要件5.3）は書き込みAPIが必要なため、
- * このセッションでは対象外（今回はカードの閲覧のみ）。
+ * このセッションでは対象外（カードの新規作成のみ対応）。
  */
 function BoardDetailView() {
   // useParamsはURLの動的セグメント（App.tsxの":boardId"部分）を文字列として返す。
@@ -29,7 +30,11 @@ function BoardDetailView() {
   // 型どおりundefinedの可能性にも備えておく。undefinedのときはuseApiにnullを渡し、
   // 意味のないURL（"/api/cards?boardId=undefined&..."）でのフェッチを起こさない。
   const path = boardId === undefined ? null : apiPaths.cards({ boardId })
-  const { data: cards, loading, error } = useApi<CardResponse[]>(path)
+  const { data: cards, loading, error, refetch } = useApi<CardResponse[]>(path)
+
+  // CardCreateFormが要求するboardId（number）。文字列のままNumber()に渡さず、
+  // undefinedガードを一箇所にまとめておく（pathの組み立てと同じ理由）。
+  const boardIdNumber = boardId === undefined ? null : Number(boardId)
 
   // 横断ビューと違い、この画面はボード別セクションが要らないので
   // groupCardsByStatus（ステータス→カードの2階層）を使う。
@@ -47,10 +52,16 @@ function BoardDetailView() {
     if (error !== null) {
       return <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
     }
-    if (cards === null || cards.length === 0) {
+    if (cards === null) {
+      // loading=false かつ error=null であれば useApi は必ず data をセットしているため、
+      // ここに到達することは実質無い。cards: T | null という型を満たすためのガード。
       return <StatusMessage kind="empty">表示できるカードがありません。</StatusMessage>
     }
 
+    // 以前はcards.length === 0のときここで打ち切り、3列そのものを描画していなかった。
+    // しかしそれでは「カードが1件もないボード」＝「＋ カードを追加が最も必要な状況」で
+    // フォーム自体が画面から消えてしまう（作成直後の空ボードがまさにこのケース）。
+    // 0件でも3列は必ず描画し、各列の中でカードの有無を出し分ける形に変更した。
     return (
       <div className="grid gap-4 md:grid-cols-3">
         {STATUSES.map((status) => {
@@ -67,6 +78,11 @@ function BoardDetailView() {
                     onSelect={(cardId) => setSelectedCardId(cardId)}
                   />
                 ))
+              )}
+              {/* 「＋ カードを追加」は未着手列の下にのみ置く（ワイヤーフレーム6.2①）。
+                  新規作成されたカードは常にstatus=todoなので、置き場所もここ一択になる。 */}
+              {status === 'todo' && boardIdNumber !== null && (
+                <CardCreateForm boardId={boardIdNumber} onCreated={refetch} />
               )}
             </StatusColumn>
           )

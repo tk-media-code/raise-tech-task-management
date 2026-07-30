@@ -11,13 +11,16 @@
 > **カスタムフックとは？**
 > `useState`・`useEffect`のような組み込みフックを内部で呼び出す、`use`で始まる名前の**ただの関数**です。特別な構文ではなく、フックを使う処理を関数として切り出しただけのものですが、[docs/react 9章](./03-state-effect.md#9-フックのルール)のフックのルールは、カスタムフックの内部にもそのまま適用されます。
 
-本プロジェクトには3つのカスタムフックがあります。
+本プロジェクトには4つのカスタムフックがあります。
 
 | フック | 役割 | 内部で使う組み込みフック |
 | --- | --- | --- |
-| `useApi<T>` | 1つのAPIパスをGETし、状態を返す | `useState`・`useEffect` |
+| `useApi<T>` | 1つのAPIパスをGETし、状態を返す（`refetch`による再取得つき） | `useState`・`useEffect`・`useCallback` |
 | `useDebouncedValue<T>` | 値の変化を遅らせて反映する | `useState`・`useEffect` |
 | `useLabelsByBoard` | ボードごとのラベル一覧をまとめて取得する | `useState`・`useEffect` |
+| `useCreate<TRequest, TResponse>` | 1つのAPIパスへPOSTし、送信状態を返す | `useState`・`useCallback` |
+
+`useCreate`は書き込み（POST）専用のフックで、`useApi`とは対照的にstateの変化を検知して自動発火する`useEffect`を持ちません。「ボタンを押すという明示的な操作」で一度だけ実行する処理という性質の違いによるものです。詳しくは[08-form-and-mutation.md 19章](./08-form-and-mutation.md#19-書き込みpostとデータの更新)を参照してください。
 
 `hooks/useApi.ts`のコメントが、カスタムフックの意義を端的に説明しています。
 

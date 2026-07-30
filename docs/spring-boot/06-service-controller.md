@@ -290,6 +290,8 @@ public List<LabelResponse> findLabelsByBoardId(Integer boardId) {
 
 `findLabelsByBoardId`が先に`existsById`でボードの存在を確認しているのは、「指定IDのボード自体が存在しない」場合と「ボードは存在するがラベルが0件」の場合を区別するためです。これを省くと、どちらのケースも同じ空配列（`[]`）として返ってしまい、クライアント側が`boardId`の指定ミスに気づけなくなります。
 
+> 📄 ここまでは参照専用（`readOnly = true`）のメソッドだけを扱いました。書き込みを行うメソッドでクラス既定の`readOnly = true`をどう上書きするかは[31章](./09-write-api-validation.md#31-登録処理の中身)を参照してください。
+
 ---
 
 ## 21. Controller層とREST API
@@ -343,13 +345,15 @@ public List<CardResponse> list(
 
 ### 本プロジェクトのエンドポイント一覧
 
-| メソッド | パス | クエリパラメータ | 説明 |
+| メソッド | パス | クエリパラメータ／ボディ | 説明 |
 | --- | --- | --- | --- |
 | GET | `/api/boards` | — | ボード一覧 |
 | GET | `/api/boards/{id}` | — | ボード1件 |
 | GET | `/api/boards/{id}/labels` | — | 指定ボードのラベル一覧 |
+| POST | `/api/boards` | ボディ：`BoardCreateRequest`（`name`） | ボード新規作成。成功時は201 + `Location`ヘッダー（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)） |
 | GET | `/api/cards` | `boardId`, `archived`, `keyword`, `labelIds`（すべて任意・組み合わせ可） | カード一覧（絞り込み） |
 | GET | `/api/cards/{id}` | — | カード1件（アーカイブ済みかどうかは問わない） |
+| POST | `/api/cards` | ボディ：`CardCreateRequest`（`boardId`, `title`, `description`, `dueDate`, `labelIds`） | カード新規作成。ステータスは常に`todo`固定。成功時は201 + `Location`ヘッダー（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)） |
 
 ### 「0件」と「見つからない」の違い
 
@@ -383,6 +387,8 @@ Java 25（正確にはJava 16以降）の`record`は、フィールド・コン�
 2. エンティティを直接返すと、DBのテーブル構造（カラム名など）がそのままAPIのレスポンス形式と直結してしまいます。DTOを1枚挟むことで、「DBの都合」と「API利用者への契約」を分離できます
 
 このDTOへの詰め替えは、`CardService`が`@Transactional`のトランザクション内（[20章](#20-service層とtransactional)）で行います。
+
+> 📄 ここで扱ったのは「サーバー→クライアント」方向のレスポンスDTOです。「クライアント→サーバー」方向のリクエストDTO（`CardCreateRequest`等）とBean Validationについては[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)を参照してください。
 
 ---
 
@@ -440,4 +446,4 @@ GET /api/boards/999
 
 `spring.mvc.problemdetails.enabled=true`（[8章](./02-build-config.md#8-applicationproperties-の読み方)）を設定しているため、Spring MVCが自前で処理する例外（例えば`GET /api/boards/abc`のようにパス変数の型変換に失敗した場合の400 Bad Request）も、同じ`application/problem+json`形式で返ります。自前の例外（404）とフレームワーク起因の例外（400など）のレスポンス形式が統一されることで、クライアント側のエラー処理を1本化できます。
 
-📄 N+1問題との関係は [24章](./07-jpa-performance.md#24-n1問題とその回避) 、`open-in-view`との関係は [25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界) を参照してください。
+📄 N+1問題との関係は [24章](./07-jpa-performance.md#24-n1問題とその回避) 、`open-in-view`との関係は [25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界) を参照してください。カード・ボード新規作成のバリデーションエラー（400）をこの仕組みにどう追加したか、そして「同じ`spring.mvc.problemdetails.enabled=true`が生む、もう1つの`@ControllerAdvice`との優先順位の落とし穴」は[30章](./09-write-api-validation.md#30-バリデーションエラーを400で返す)で詳しく扱います。

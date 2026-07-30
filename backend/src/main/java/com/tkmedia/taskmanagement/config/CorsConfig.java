@@ -58,14 +58,16 @@ public class CorsConfig implements WebMvcConfigurer {
 		registry.addMapping("/api/**")
 				// 許可するオリジン。空配列（＝設定が空）の場合はどのオリジンも許可されない。
 				.allowedOrigins(allowedOrigins)
-				// 現在のAPIは参照系(GET)のみなのでGETだけを許可する。
-				// 将来の書き込みAPI(POST等)を先回りして許可しないのは、
-				// (1) allowedMethodsはブラウザ向けの宣言であってサーバー側の認可ではなく、
-				//     先出しで許可しても安全性は1ミリも上がらない、
-				// (2) この1行が「今このAPIに何ができるか」の正直な写しであってほしい、
-				// (3) 書き込みAPI追加時に出るブラウザのCORSエラーは初回の手動テストで
-				//     必ず出る「うるさい失敗」で、静かに見逃されることがない、から。
-				.allowedMethods("GET")
+				// カード・ボードの新規登録（POST）を実装したため、GETに加えてPOSTも許可する
+				// （docs/spring-boot/09-write-api-validation.md 28章参照）。
+				// 以前このメソッドが"GET"のみだった頃に残していた「先回りで許可しない理由」
+				// （(1) allowedMethodsはブラウザ向けの宣言であって認可の仕組みではない、
+				// 　(2) この1行を「今このAPIに何ができるか」の正直な写しにしたい、
+				// 　(3) 未許可のまま書き込みAPIを追加すると、ブラウザのCORSエラーという
+				// 　　　「うるさい失敗」で気づける）という考え方自体は変わっていない。
+				// PUT/DELETE（更新・削除）はまだ実装していないため、まだここには加えない。
+				// 実装した時点で、この行にも追加すること。
+				.allowedMethods("GET", "POST")
 				// Cookieや Authorization ヘッダーは送らないので false（Springの既定と同じだが、
 				// 「意図的に送らない」ことを明示する）。なお allowCredentials(true) と
 				// allowedOrigins("*") の併用はCORS仕様で禁止されており、Springは起動時に例外を投げる。

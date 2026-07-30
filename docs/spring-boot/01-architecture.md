@@ -134,12 +134,12 @@ public class TaskManagementApplication {
 | ------------------------------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | 起動クラス                     | 実装済み                               | `TaskManagementApplication.java`                                                                              |
 | Entity（データの型）           | 実装済み（5種）                        | `entity/Board.java` 等（[10〜15章](./03-entity-jpa.md)参照）                                                  |
-| Repository（データアクセス）   | 実装済み（GET系のみ）                  | `repository/BoardRepository.java` 等（[17〜19章](./05-repository.md)参照）                                     |
-| Service（ビジネスロジック）    | 実装済み（GET系のみ）                  | `service/BoardService.java` 等（[20章](./06-service-controller.md#20-service層とtransactional)参照）           |
-| Controller（API）              | 実装済み（GET系のみ）                  | `controller/BoardController.java` 等（[21章](./06-service-controller.md#21-controller層とrest-api)参照）       |
-| DTO（レスポンス用）            | 実装済み                               | `dto/BoardResponse.java` 等（[22章](./06-service-controller.md#22-dtoレコードでエンティティを外に出さない)参照） |
-| バリデーション（入力チェック） | 未実装（Write系API実装時に対応予定）   | —                                                                                                              |
-| 例外処理                       | 実装済み（404のみ）                    | `exception/GlobalExceptionHandler.java`（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)参照） |
+| Repository（データアクセス）   | 実装済み（GET・カード/ボード登録）      | `repository/BoardRepository.java` 等（[17〜19章](./05-repository.md)参照）                                     |
+| Service（ビジネスロジック）    | 実装済み（GET・カード/ボード登録）      | `service/BoardService.java` 等（[20章](./06-service-controller.md#20-service層とtransactional)、[31章](./09-write-api-validation.md#31-登録処理の中身)参照）           |
+| Controller（API）              | 実装済み（GET・カード/ボード登録）      | `controller/BoardController.java` 等（[21章](./06-service-controller.md#21-controller層とrest-api)、[28章](./09-write-api-validation.md#28-登録系apipostの作り方)参照）       |
+| DTO（レスポンス用・リクエスト用） | 実装済み                             | `dto/BoardResponse.java`・`dto/CardCreateRequest.java` 等（[22章](./06-service-controller.md#22-dtoレコードでエンティティを外に出さない)、[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)参照） |
+| バリデーション（入力チェック） | 実装済み（Bean Validation）            | `spring-boot-starter-validation`（[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)参照）                                                              |
+| 例外処理                       | 実装済み（404・400）                   | `exception/GlobalExceptionHandler.java`（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)、[30章](./09-write-api-validation.md#30-バリデーションエラーを400で返す)参照） |
 | テスト（独自ロジック）         | 未実装（`contextLoads`のみ）         | `TaskManagementApplicationTests.java`                                                                         |
 
-現時点ではRead系（GET）のCRUD操作のみが実装済みです。Write系（POST/PUT/DELETE）の実装にあわせて、DTOのバリデーション（`spring-boot-starter-validation`の導入）や、404以外の例外パターン（400 Bad Requestなど）への対応が今後の課題になります。新しい層・概念を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従ってこのドキュメント群を更新してください。
+現時点ではRead系（GET）に加え、カード・ボードの新規登録（POST）が実装済みです。カードの更新・削除、ボードの改名・削除・並べ替えといった残りのWrite系API（PUT/DELETE）や、独自ロジックに対する自動テストの導入が今後の課題になります。新しい層・概念を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従ってこのドキュメント群を更新してください。

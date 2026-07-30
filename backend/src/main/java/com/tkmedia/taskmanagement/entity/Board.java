@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.OffsetDateTime;
 
@@ -23,17 +24,25 @@ public class Board {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Integer id;
 
-	// ボード名。NOT NULL制約（空を許さない）
-	@Column(nullable = false)
+	// ボード名。NOT NULL制約（空を許さない）。
+	// length = 50 はDBカラムをvarchar(50)にする指定（アプリ側の @Size(max = 50) と揃える多重防御。
+	// docs/spring-boot/09-write-api-validation.md 29章参照）。prototype/index.htmlのmaxlength="50"を踏襲した値。
+	@Column(nullable = false, length = 50)
 	private String name;
 
 	// ボード一覧での表示順
 	@Column(nullable = false)
 	private Integer position;
 
-	// 作成日時。DB側のDEFAULT（now()）に対応させ、INSERT時にDBが自動設定する
+	// 作成日時。
+	// @ColumnDefault("now()")はDDL生成時にDB側のDEFAULT式を刻むだけで、Hibernateが発行するINSERT文は
+	// このカラムを含め全カラムを明示的に列挙するため、Javaの値がnullのままだとDEFAULTは使われず
+	// NOT NULL制約違反になる（db/seed/dummy-data.sqlのような直接INSERTのための保険として残している）。
+	// @CreationTimestampはHibernate独自の拡張で、INSERT直前にJava側で現在時刻を採番し
+	// このフィールドへ自動的にセットしてくれる（docs/spring-boot/09-write-api-validation.md 31章参照）。
 	@Column(name = "created_at", nullable = false)
 	@ColumnDefault("now()")
+	@CreationTimestamp
 	private OffsetDateTime createdAt;
 
 	public Integer getId() {

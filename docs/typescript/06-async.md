@@ -2,7 +2,7 @@
 
 [← TypeScript学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **13〜14章** をまとめています。
+> 元の学習ドキュメントにおける **13〜15章** をまとめています。
 
 ---
 
@@ -140,3 +140,65 @@ return () => {
 `AbortController`は「進行中の`fetch`を外から中断するためのリモコン」です。`controller.signal`を`fetch`に渡しておき、`controller.abort()`を呼ぶと、対応する`fetch`の`Promise`が（`AbortError`という名前の`Error`で）失敗します。[docs/react 8章](../react/03-state-effect.md#8-useeffectと副作用クリーンアップ)で扱う`useEffect`のクリーンアップ関数からこの`abort()`を呼ぶことで、「表示中の画面が切り替わったのに、古いリクエストの結果が後から届いて古いデータで上書きしてしまう」という競合状態（レースコンディション）を防いでいます。
 
 `fetch`の`signal`オプションはTypeScript固有の機能ではなく、`AbortController`・`AbortSignal`ともにブラウザ標準のWeb APIです。`hooks/useApi.ts`の`UseApiResult<T>`（[7章](./03-generics.md#7-ジェネリクス)）が「読み込み中／失敗／データあり」という3状態をきちんと管理できているのは、この中断の仕組みと、`controller.signal.aborted`（中断済みかどうかを表す`boolean`）を`.catch`・`.finally`の中で確認するガード処理の組み合わせによるものです。実装の詳しい流れは[docs/react 8章](../react/03-state-effect.md#8-useeffectと副作用クリーンアップ)・[11章](../react/04-custom-hooks.md#11-データ取得の3状態とレースコンディション)で扱います。
+
+---
+
+## 15. `fetch`でのPOSTとリクエストボディ
+
+これまでの`fetchJson`は`fetch(url, { signal })`という最小限の第2引数だけで、常にGETリクエストを送っていました（`fetch`はオプションを省略すると既定でGETになります）。カード・ボードの新規作成にあわせて、`api/client.ts`に`postJson`が加わりました。
+
+```typescript
+export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+  return request<TResponse>(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+```
+
+`fetch`の第2引数（`RequestInit`という組み込み型）は、GET専用ではなく、HTTP通信の内容を細かく指定できるオプションの入れ物です。
+
+| プロパティ | 役割 |
+| --- | --- |
+| `method` | HTTPメソッド。省略時の既定値は`'GET'`。POSTするにはここに`'POST'`を明示する |
+| `headers` | リクエストヘッダー。`'Content-Type': 'application/json'`は「このリクエストボディはJSON形式である」とサーバーに伝えるためのもの。これが無いと、バックエンド（Spring MVC）が`@RequestBody`をどう読めばよいか判断できない（[docs/spring-boot 28章](../spring-boot/09-write-api-validation.md#28-登録系apipostの作り方)参照） |
+| `body` | リクエストボディの中身。文字列（または`Blob`・`FormData`など）を渡す必要があり、TypeScriptのオブジェクトをそのまま渡すことはできない |
+
+### `JSON.stringify`：オブジェクトをJSON文字列に変換する
+
+```typescript
+body: JSON.stringify(body)
+```
+
+`fetch`のボディに渡せるのは文字列などの限られた型だけで、TypeScript/JavaScriptのオブジェクトをそのまま渡すことはできません。`JSON.stringify(値)`は、オブジェクトを**JSON形式の文字列**へ変換するブラウザ標準の関数です。`api/client.ts`の`response.json()`（[13章](#13-promiseとasyncawait)）がレスポンスボディの文字列をオブジェクトへ変換する`JSON.parse`相当の処理だったのに対し、`JSON.stringify`はその**逆方向**の変換にあたります。
+
+### 型引数が2つあるジェネリクス関数
+
+`postJson<TRequest, TResponse>`は、[7章](./03-generics.md#7-ジェネリクス)で見た`fetchJson<T>`と違い、型引数を2つ取ります。
+
+```typescript
+export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+```
+
+| 型引数 | 何を表すか | 呼び出し例 |
+| --- | --- | --- |
+| `TRequest` | 送信するリクエストボディの型 | `CardCreateRequest` |
+| `TResponse` | 返ってくるレスポンスボディの型 | `CardResponse` |
+
+GETは「何を取得するか」（レスポンスの型）だけを指定すれば済みましたが、POSTは「何を送るか」と「何が返ってくるか」という**2つの独立した型**を扱う必要があります。この2つは同じ型になるとは限りません（実際、`CardCreateRequest`は`labelIds: number[]`という送信専用のフィールドを持つ一方、`CardResponse`は付与済みラベルの詳細（`labels: LabelResponse[]`）や`status`・`position`のようなサーバー側が決める値を持つ、別の形の型です）。`hooks/useCreate.ts`の`useCreate<TRequest, TResponse>`（[docs/react 19章](../react/08-form-and-mutation.md#19-書き込みpostとデータの更新)）も同じく2つの型引数を取り、`postJson`の型引数をそのまま中継しています。
+
+### なぜPOSTは中断（`AbortSignal`）を受け取らないのか
+
+`fetchJson`との、もう1つの意図的な非対称があります。`postJson`は`signal`を引数に取りません。
+
+```typescript
+// fetchJson: signalを受け取る
+export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T>
+
+// postJson: signalを受け取らない
+export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse>
+```
+
+GETの中断（[14章](#14-fetchとabortcontroller)）は、「表示しても無駄になった結果を捨てる」だけの安全な操作でした。中断してもサーバー側では単に参照が行われただけで、取り消すべき状態の変化はありません。POSTはそうはいきません。クライアント側で`fetch`を`abort()`しても、その時点でリクエストが既にサーバーに届いていれば、**サーバー側の処理（DBへの書き込み）は止まらない**可能性があります。「中断したつもりが、実際にはカードが作成されていた」という状態は、GETの中断より遥かに厄介な不整合です。`postJson`が`AbortSignal`を受け取れないようにしているのは、この非対称性を型のレベルで表現し、「POSTは一度始めたら最後まで見届ける」という設計意図を示すためです。
+

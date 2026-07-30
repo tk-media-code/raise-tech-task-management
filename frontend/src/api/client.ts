@@ -56,21 +56,23 @@ async function readProblemDetail(response: Response): Promise<ProblemDetail | nu
 }
 
 /**
- * APIをGETで叩き、レスポンスのJSONを指定した型として返す。
+ * fetchを実行し、レスポンスのJSONを指定した型として返す共通処理。
+ * GET用の{@link fetchJson}・POST用の{@link postJson}の両方がこの関数に委譲する
+ * （HTTPメソッドが違うだけで、エラーの扱い方・JSONへの変換方法は完全に共通のため）。
  *
  * 責務の分担: このファイル（クライアント）が持つのは「APIがどこにあるか」（ベースURL）と
  * 「HTTPレスポンスをどう値かErrorに変えるか」。Reactのライフサイクル（state・再フェッチの
- * タイミングなど）は一切知らず、hooks/useApi.ts 側の責務にしている。
+ * タイミングなど）は一切知らず、hooks/useApi.ts・hooks/useCreate.ts 側の責務にしている。
  *
- * @param path   APIのパス（例: "/api/boards"）。ベースURLはこの関数が前置する
- * @param signal 中断用のシグナル（AbortControllerから取得したもの）
+ * @param path APIのパス（例: "/api/boards"）。ベースURLはこの関数が前置する
+ * @param init fetchにそのまま渡すオプション（method・headers・body・signalなど）
  * @returns パースしたJSON
  * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
  */
-export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T> {
+async function request<T>(path: string, init: RequestInit): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { signal })
+    response = await fetch(`${API_BASE_URL}${path}`, init)
   } catch (cause) {
     // 中断は呼び出し側（useApiのクリーンアップ）が意図してやったこと。
     // ここで握り潰すと中断が「通信エラー」として画面に出てしまうので、そのまま投げ直す。
@@ -101,6 +103,43 @@ export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T
   // 型定義（types/api.ts）とバックエンドのDTOがずれていても、TypeScriptは気づけない。
   // 外部から来るデータに対する型は「保証」ではなく「約束」だという点は覚えておくこと。
   return (await response.json()) as T
+}
+
+/**
+ * APIをGETで叩き、レスポンスのJSONを指定した型として返す。
+ *
+ * @param path   APIのパス（例: "/api/boards"）。ベースURLはこの関数が前置する
+ * @param signal 中断用のシグナル（AbortControllerから取得したもの）
+ * @returns パースしたJSON
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T> {
+  return request<T>(path, { signal })
+}
+
+/**
+ * APIをPOSTで叩き、レスポンスのJSONを指定した型として返す
+ * （docs/typescript/06-async.md 15章参照）。
+ *
+ * @param path APIのパス（例: "/api/cards"）
+ * @param body リクエストボディに乗せるオブジェクト。JSON.stringifyでJSON文字列に変換して送る
+ * @returns パースしたレスポンスJSON（作成されたリソースを表すDTO）
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+// fetchJsonと違い、signalを引数に取らない（＝中断できない）のは意図的な非対称。
+// GETの中断は「表示しても無駄になった結果を捨てる」だけの安全な操作だが、POSTは
+// 呼び出し元でfetchをabortしても、サーバー側では既に処理が進行・完了している可能性があり、
+// クライアント側のPromiseを中断してもDBへの書き込みそのものは取り消せない
+// （「中断したつもり」なのに実際には登録されている、という状態を防ぐため、
+// あえて中断の手段を用意していない）。
+export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+  return request<TResponse>(path, {
+    method: 'POST',
+    // Content-Typeを明示しないと、Jacksonが@RequestBodyをJSONとして解釈してくれない
+    // （バックエンドはこのヘッダーを見てボディの読み方を選ぶ）。
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
 }
 
 /**
@@ -151,4 +190,14 @@ export const apiPaths = {
 
   /** 指定ボードのラベル一覧（検索画面のラベル絞り込みUIで、ボードごとにグループ化する際に使う） */
   boardLabels: (boardId: number | string) => `/api/boards/${boardId}/labels`,
+
+  /**
+   * カード新規作成（POST）先のパス。
+   * cards()と同じ"/api/cards"だが、cards()は一覧取得用にarchived等のクエリを必ず付ける関数のため
+   * 流用せず、書き込み用に引数を取らない別関数として分けている。
+   */
+  createCard: () => '/api/cards',
+
+  /** ボード新規作成（POST）先のパス */
+  createBoard: () => '/api/boards',
 }

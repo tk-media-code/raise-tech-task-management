@@ -1,5 +1,6 @@
 package com.tkmedia.taskmanagement.service;
 
+import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.entity.Board;
@@ -84,6 +85,30 @@ public class BoardService {
 		return labelRepository.findByBoardIdOrderByIdAsc(boardId).stream()
 				.map(BoardService::toResponse)
 				.toList();
+	}
+
+	/**
+	 * ボードを新規作成する。
+	 *
+	 * @param request 作成内容（ボード名）
+	 * @return 作成したボードのDTO
+	 */
+	// クラスに付けた @Transactional(readOnly = true) を、書き込みを行うこのメソッドだけ
+	// @Transactional で上書きする（CardService.createと同じ理由。
+	// docs/spring-boot/09-write-api-validation.md 31章参照）。
+	@Transactional
+	public BoardResponse create(BoardCreateRequest request) {
+		// nameは@NotBlankで「空白のみ」は弾かれているが、前後の空白そのものは除去されないため、
+		// ここでtrimする。
+		Board board = new Board();
+		board.setName(request.name().trim());
+		// 既存の最大position+1を採番する。CardService.createのposition採番と同じく、
+		// 同時作成によるレースコンディションの可能性はあるが、個人利用アプリでは許容している。
+		board.setPosition(boardRepository.findMaxPosition() + 1);
+		// createdAtはBoardエンティティの@CreationTimestampがINSERT時に自動でセットするため、
+		// ここでは何もしない。
+		Board saved = boardRepository.save(board);
+		return toResponse(saved);
 	}
 
 	// エンティティをDTOへ変換する処理。DBアクセスを伴わない単純な詰め替えだが、

@@ -78,4 +78,38 @@ export type ProblemDetail = {
   status?: number
   detail?: string
   instance?: string
+  /**
+   * バリデーションエラー（400）のときだけ含まれる、フィールド名→エラーメッセージの対応。
+   * RFC 9457は標準メンバー以外の拡張を許容しており、これはバックエンドの
+   * GlobalExceptionHandler.handleValidationError が独自に追加している拡張メンバー
+   * （backend/.../exception/GlobalExceptionHandler.java 参照）。
+   * 404など他の種類のエラーには含まれないため、他のフィールドと同じく省略可能にしている。
+   */
+  errors?: Record<string, string>
+}
+
+/**
+ * カード新規作成API（{@code POST /api/cards}}）のリクエストボディ。
+ * バックエンド: backend/.../dto/CardCreateRequest.java（フィールド名・順序を一致させる）
+ *
+ * description・dueDate・labelIdsを省略可能にしているのは、要件5.2「タイトルのみでカードを
+ * 新規作成できる」に対応するため。ただし送信時は明示的に`null`を入れる方針にしている
+ * （components/CardCreateForm.tsx参照）。undefinedにして省略した場合でも、JSON.stringifyが
+ * そのキー自体を出力しないため結果的にサーバー側の「未指定」と同じ扱いになるが、
+ * 「入力欄が空だった」ことを明示する方が意図が伝わりやすいため。
+ */
+export type CardCreateRequest = {
+  boardId: number
+  title: string
+  description: string | null
+  dueDate: string | null
+  labelIds: number[]
+}
+
+/**
+ * ボード新規作成API（{@code POST /api/boards}}）のリクエストボディ。
+ * バックエンド: backend/.../dto/BoardCreateRequest.java
+ */
+export type BoardCreateRequest = {
+  name: string
 }

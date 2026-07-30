@@ -3,20 +3,25 @@ import type { LabelResponse } from '../types/api'
 
 type Props = {
   label: LabelResponse
-  /** このラベルが現在の絞り込み条件に含まれているか */
+  /** このラベルが現在選択されているか（検索画面では絞り込み条件、カード作成では付与予定） */
   selected: boolean
   /** クリックされたとき（選択⇔解除のトグル）に呼ばれる */
   onToggle: (labelId: number) => void
 }
 
 /**
- * 検索画面（要件5.8）のラベル絞り込みUIで使う、選択状態を持つトグル可能なラベルチップ。
+ * 選択状態を持つトグル可能なラベルチップ。
+ * 検索画面（要件5.8）のラベル絞り込みUIと、カード作成フォーム（要件5.2）のラベル選択UIの
+ * 2箇所で使う共通コンポーネント（もとは検索画面専用のLabelFilterChipという名前だったが、
+ * カード作成フォームでも同じ見た目・同じトグル動作が必要になったため、
+ * 「絞り込み専用」を含意しない名前へリネームして共有した。lib/color.tsのgetContrastTextColorが
+ * 「2人目の利用者が現れた時点でlib/へ昇格する」判断をしたのと同じ考え方）。
  *
  * 表示専用の`LabelChip`（`<span>`）とは異なり、これは押せる`<button>`で、
  * 選択中かどうかで見た目が変わる。ロジック（背景色に対する読みやすい文字色の計算）は
  * `LabelChip`と共通なので`lib/color.ts`から同じ関数を使う。
  */
-function LabelFilterChip({ label, selected, onToggle }: Props) {
+function LabelToggleChip({ label, selected, onToggle }: Props) {
   return (
     <button
       type="button"
@@ -38,4 +43,4 @@ function LabelFilterChip({ label, selected, onToggle }: Props) {
   )
 }
 
-export default LabelFilterChip
+export default LabelToggleChip
