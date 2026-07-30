@@ -130,7 +130,7 @@ public class CorsConfig implements WebMvcConfigurer {
 
 `addMapping("/api/**")`で「どのURLパターンにこのCORS設定を適用するか」を、`allowedOrigins(...)`で「どのオリジンからのリクエストを許可するか」を指定します。
 
-**`allowedMethods`は今できることの正直な写し**：このAPIが参照専用（GETのみ）だった間、`allowedMethods("GET")`はPOSTを先回りして許可していませんでした。理由は、`allowedMethods`がブラウザに対する宣言でありサーバー側の認可ではない以上、先に許可しておいても安全性は1ミリも上がらず、むしろ「今のAPIには何ができるか」という正直さが失われるためです。カード・ボードの新規作成（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)）でPOSTを実装した今、`allowedMethods("GET", "POST")`へ引き上げました。これは「先回りして許可していた設定を後から使い始めた」のではなく、「実装した機能ぶんだけ許可を広げた」という順序です。まだ実装していないPUT/DELETEは、引き続きここに含めていません。この方針を裏付けたのが、実装直後に実際に体験した次の失敗です。
+**`allowedMethods`は今できることの正直な写し**：このAPIが参照専用（GETのみ）だった間、`allowedMethods("GET")`はPOSTを先回りして許可していませんでした。理由は、`allowedMethods`がブラウザに対する宣言でありサーバー側の認可ではない以上、先に許可しておいても安全性は1ミリも上がらず、むしろ「今のAPIには何ができるか」という正直さが失われるためです。カード・ボードの新規作成（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)）でPOSTを実装した今、`allowedMethods("GET", "POST")`へ引き上げました。これは「先回りして許可していた設定を後から使い始めた」のではなく、「実装した機能ぶんだけ許可を広げた」という順序です。この時点ではまだ実装していなかったPUT/DELETEは、引き続きここに含めていませんでした（その後カードの編集・ステータス変更でPUT/PATCHを実装した際に、同じ方針のまま`allowedMethods("GET", "POST", "PUT", "PATCH")`へ引き上げています。[37章](./10-update-api.md#37-corsへの追記)参照）。この方針を裏付けたのが、実装直後に実際に体験した次の失敗です。
 
 > 書き込みAPI追加時に出るブラウザのCORSエラーは初回の手動テストで必ず出る「うるさい失敗」で、静かに見逃されることがありません（[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)の`open-in-view=false`と同じ「静かな見落としより騒がしい失敗を選ぶ」という設計態度です）。実際、`CorsConfig`の更新を1テンポ忘れたままフロントエンドから`POST /api/cards`を叩くと、ブラウザの開発者ツールには`Access to fetch at 'http://localhost:8080/api/cards' from origin 'http://localhost:5173' has been blocked by CORS policy`という、原因のはっきりしたエラーが出ます。これは[下記](#設定を誤ったときにブラウザで何が起きるか)で見る`TypeError: Failed to fetch`と対になる、CORS設定漏れ特有の症状です。
 

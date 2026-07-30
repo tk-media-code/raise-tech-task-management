@@ -1,12 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
+import { closestCenter, DndContext, DragOverlay } from '@dnd-kit/core'
 import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
-import CardItem from '../components/CardItem'
+import CardDragPreview from '../components/CardDragPreview'
+import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
+import { columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
 import { groupCardsByStatus } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
 import type { CardResponse } from '../types/api'
@@ -17,8 +20,9 @@ import type { CardResponse } from '../types/api'
  * 横断ビュー（③）と3列の枠組みは同じだが、こちらはボード別セクションを
  * 挟まず、カードをそのままステータス列に並べる点が違う。
  *
- * ドラッグ＆ドロップによるステータス変更（要件5.3）は書き込みAPIが必要なため、
- * このセッションでは対象外（カードの新規作成のみ対応）。
+ * ドラッグ＆ドロップによる列間の移動・列内の並べ替え（要件5.3）は
+ * hooks/useCardDragAndDrop.tsに実装をまとめ、この画面はDndContextで包んで
+ * センサー・イベントハンドラを繋ぐだけにしている。
  */
 function BoardDetailView() {
   // useParamsはURLの動的セグメント（App.tsxの":boardId"部分）を文字列として返す。
@@ -36,9 +40,13 @@ function BoardDetailView() {
   // undefinedガードを一箇所にまとめておく（pathの組み立てと同じ理由）。
   const boardIdNumber = boardId === undefined ? null : Number(boardId)
 
+  // ドラッグ＆ドロップの状態一式。dragAndDrop.cardsは、ドラッグ直後の一時的な期間だけ
+  // useApiの生のcardsではなくローカルで並べ替え済みの一覧を返す（詳細はフックのdocblock参照）。
+  const dragAndDrop = useCardDragAndDrop(cards, refetch)
+
   // 横断ビューと違い、この画面はボード別セクションが要らないので
   // groupCardsByStatus（ステータス→カードの2階層）を使う。
-  const grouped = useMemo(() => groupCardsByStatus(cards), [cards])
+  const grouped = useMemo(() => groupCardsByStatus(dragAndDrop.cards), [dragAndDrop.cards])
 
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
 
@@ -52,9 +60,11 @@ function BoardDetailView() {
     if (error !== null) {
       return <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
     }
-    if (cards === null) {
+    if (cards === null || boardIdNumber === null) {
       // loading=false かつ error=null であれば useApi は必ず data をセットしているため、
-      // ここに到達することは実質無い。cards: T | null という型を満たすためのガード。
+      // cards===nullにここで到達することは実質無い。boardIdNumber===nullも同様
+      // （pathがnullでない＝boardIdが文字列である場合にしかcardsは非nullにならないため）。
+      // どちらも型を満たすためのガード。
       return <StatusMessage kind="empty">表示できるカードがありません。</StatusMessage>
     }
 
@@ -63,31 +73,38 @@ function BoardDetailView() {
     // フォーム自体が画面から消えてしまう（作成直後の空ボードがまさにこのケース）。
     // 0件でも3列は必ず描画し、各列の中でカードの有無を出し分ける形に変更した。
     return (
-      <div className="grid gap-4 md:grid-cols-3">
-        {STATUSES.map((status) => {
-          const statusCards = grouped[status]
-          return (
-            <StatusColumn key={status} title={STATUS_LABELS[status]} count={statusCards.length}>
-              {statusCards.length === 0 ? (
-                <p className="text-xs text-slate-400">カードはまだありません</p>
-              ) : (
-                statusCards.map((card) => (
-                  <CardItem
-                    key={card.id}
-                    card={card}
-                    onSelect={(cardId) => setSelectedCardId(cardId)}
-                  />
-                ))
-              )}
-              {/* 「＋ カードを追加」は未着手列の下にのみ置く（ワイヤーフレーム6.2①）。
-                  新規作成されたカードは常にstatus=todoなので、置き場所もここ一択になる。 */}
-              {status === 'todo' && boardIdNumber !== null && (
-                <CardCreateForm boardId={boardIdNumber} onCreated={refetch} />
-              )}
-            </StatusColumn>
-          )
-        })}
-      </div>
+      <DndContext
+        sensors={dragAndDrop.sensors}
+        collisionDetection={closestCenter}
+        onDragStart={dragAndDrop.handleDragStart}
+        onDragEnd={dragAndDrop.handleDragEnd}
+      >
+        <div className="grid gap-4 md:grid-cols-3">
+          {STATUSES.map((status) => {
+            const statusCards = grouped[status]
+            return (
+              <StatusColumn key={status} title={STATUS_LABELS[status]} count={statusCards.length}>
+                <SortableCardList
+                  id={columnId(status, boardIdNumber)}
+                  cards={statusCards}
+                  onSelect={(cardId) => setSelectedCardId(cardId)}
+                  onMoved={refetch}
+                  emptyHint={<p className="text-xs text-slate-400">カードはまだありません</p>}
+                />
+                {/* 「＋ カードを追加」は未着手列の下にのみ置く（ワイヤーフレーム6.2①）。
+                    新規作成されたカードは常にstatus=todoなので、置き場所もここ一択になる。 */}
+                {status === 'todo' && <CardCreateForm boardId={boardIdNumber} onCreated={refetch} />}
+              </StatusColumn>
+            )
+          })}
+        </div>
+
+        {/* ドラッグ中、ポインタに追従する見た目のコピー。activeCardがnull（ドラッグしていない）
+            間は何も描画しない。 */}
+        <DragOverlay>
+          {dragAndDrop.activeCard !== null && <CardDragPreview card={dragAndDrop.activeCard} />}
+        </DragOverlay>
+      </DndContext>
     )
   }
 
@@ -95,7 +112,10 @@ function BoardDetailView() {
     <section>
       <h2 className="mb-4 text-lg font-semibold">ボード詳細</h2>
       {renderContent()}
-      <CardDetailModal cardId={selectedCardId} onClose={() => setSelectedCardId(null)} />
+      {dragAndDrop.error !== null && (
+        <StatusMessage kind="error">カードの移動に失敗しました：{dragAndDrop.error.message}</StatusMessage>
+      )}
+      <CardDetailModal cardId={selectedCardId} onUpdated={refetch} onClose={() => setSelectedCardId(null)} />
     </section>
   )
 }

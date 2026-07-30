@@ -3,12 +3,16 @@ package com.tkmedia.taskmanagement.controller;
 import com.tkmedia.taskmanagement.dto.CardCreateRequest;
 import com.tkmedia.taskmanagement.dto.CardResponse;
 import com.tkmedia.taskmanagement.dto.CardSearchCondition;
+import com.tkmedia.taskmanagement.dto.CardStatusUpdateRequest;
+import com.tkmedia.taskmanagement.dto.CardUpdateRequest;
 import com.tkmedia.taskmanagement.service.CardService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -94,5 +98,40 @@ public class CardController {
 		// カードIDが数値（パスに直接埋め込んでも安全な文字種）であるため、
 		// URLエンコードを考慮する必要が無いという判断による。
 		return ResponseEntity.created(URI.create("/api/cards/" + created.id())).body(created);
+	}
+
+	/**
+	 * カードを編集する（タイトル・説明・期日・ラベル）。
+	 *
+	 * @param id      更新対象のカードID
+	 * @param request リクエストボディ（タイトル・説明・期日・ラベル）
+	 * @return 更新後のカード
+	 */
+	// 戻り値を素のCardResponseにしている（POSTのようにResponseEntityでラップしない）理由:
+	// このAPIは既存リソースを更新するだけで新しいURLを作らないため、201 CreatedやLocationヘッダーを
+	// 返す必要が無い。成功時はGET系と同じ200 OKが素直な選択であり、Spring MVCは戻り値をそのまま
+	// レスポンスボディとして扱い、ステータスコードは明示しなければ自動的に200になる。
+	@PutMapping("/{id}")
+	public CardResponse update(@PathVariable Integer id, @Valid @RequestBody CardUpdateRequest request) {
+		return cardService.update(id, request);
+	}
+
+	/**
+	 * カードのステータス（および、ステータス列内での並び順）を変更する。
+	 *
+	 * @param id      対象カードのID
+	 * @param request 変更後のステータスと、移動先列内での挿入位置（省略時は列の末尾）
+	 * @return 更新後のカード
+	 */
+	// PUTではなくPATCHを使う理由:
+	// このAPIは「カードの全属性を送り直す」のではなく「ステータスと並び順という一部の属性だけ」を
+	// 変更する部分更新であるため。PUTはリソース全体を置き換える意味を持つHTTPメソッドであり、
+	// タイトルや説明を含まないこのリクエストボディをPUTとして送ってしまうと、
+	// 「タイトル等は指定しなかったので変更しない」のか「タイトル等を空にする」のかが
+	// 意味的に曖昧になる。PATCHはもともと部分的な変更を表すために用意されたメソッドであり、
+	// この曖昧さが生じない。
+	@PatchMapping("/{id}/status")
+	public CardResponse updateStatus(@PathVariable Integer id, @Valid @RequestBody CardStatusUpdateRequest request) {
+		return cardService.updateStatus(id, request);
 	}
 }

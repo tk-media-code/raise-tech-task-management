@@ -354,6 +354,8 @@ public List<CardResponse> list(
 | GET | `/api/cards` | `boardId`, `archived`, `keyword`, `labelIds`（すべて任意・組み合わせ可） | カード一覧（絞り込み） |
 | GET | `/api/cards/{id}` | — | カード1件（アーカイブ済みかどうかは問わない） |
 | POST | `/api/cards` | ボディ：`CardCreateRequest`（`boardId`, `title`, `description`, `dueDate`, `labelIds`） | カード新規作成。ステータスは常に`todo`固定。成功時は201 + `Location`ヘッダー（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)） |
+| PUT | `/api/cards/{id}` | ボディ：`CardUpdateRequest`（`title`, `description`, `dueDate`, `labelIds`） | カード編集（タイトル・説明・期日・ラベル）。所属ボード・ステータスは対象外（[33章](./10-update-api.md#33-更新系apiputpatchの作り方)） |
+| PATCH | `/api/cards/{id}/status` | ボディ：`CardStatusUpdateRequest`（`status`, `position`） | ステータス変更＋列内の並び替え（[33章](./10-update-api.md#33-更新系apiputpatchの作り方)） |
 
 ### 「0件」と「見つからない」の違い
 

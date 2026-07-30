@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
+import { closestCenter, DndContext, DragOverlay } from '@dnd-kit/core'
 import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
-import CardItem from '../components/CardItem'
+import CardDragPreview from '../components/CardDragPreview'
+import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
+import { columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
 import { groupCardsByStatusAndBoard } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
 import type { BoardResponse, CardResponse } from '../types/api'
@@ -31,6 +34,11 @@ type Props = {
  * セクションそれぞれに「＋ カードを追加」を置いていた（buildQuickAddHtmlを
  * ボード詳細画面と共有）。この画面も同じくボードごとに独立した`CardCreateForm`を
  * 未着手セクションへ置くことでこれに揃えている。
+ *
+ * ドラッグ＆ドロップ（要件5.3）は「ステータス×ボード」を1つの列（hooks/useCardDragAndDrop.tsの
+ * columnId）として扱う。ボードをまたいだドロップは、useCardDragAndDrop側で
+ * 「別ボードのセクションへのドロップは無視する」判定が入っているため、この画面の側では
+ * 何も特別な考慮をせず、ボード詳細画面と同じ1本のDndContextで済ませられる。
  */
 function CrossBoardView({ boards }: Props) {
   // boardIdを指定せずGET /api/cardsを呼ぶと、全ボードのカードが返る
@@ -39,11 +47,15 @@ function CrossBoardView({ boards }: Props) {
   // （BoardDetailView.tsxと同じ理由。hooks/useApi.tsのrefetch参照）。
   const { data: cards, loading, error, refetch } = useApi<CardResponse[]>(apiPaths.cards())
 
+  // ドラッグ＆ドロップの状態一式。dragAndDrop.cardsは、ドラッグ直後の一時的な期間だけ
+  // useApiの生のcardsではなくローカルで並べ替え済みの一覧を返す（詳細はフックのdocblock参照）。
+  const dragAndDrop = useCardDragAndDrop(cards, refetch)
+
   // フラットな配列を「ステータス→ボード→カード」の3階層に組み替える。
   // boardsも依存配列に含めるのは、ボード管理モーダルでの新規作成直後、
   // カード側は変わらずボード一覧だけが更新されるケースでも組み替えを
   // やり直す必要があるため（新しいボードのセクションを出現させる）。
-  const grouped = useMemo(() => groupCardsByStatusAndBoard(cards, boards), [cards, boards])
+  const grouped = useMemo(() => groupCardsByStatusAndBoard(dragAndDrop.cards, boards), [dragAndDrop.cards, boards])
 
   // 開いているカード詳細モーダルのカードID。nullは「閉じている」を表す。
   // このstateをApp.tsxではなくこのページ自身が持つのは、モーダルを開く操作
@@ -77,57 +89,66 @@ function CrossBoardView({ boards }: Props) {
     // 消えてしまう（pages/BoardDetailView.tsxで同じ理由により先に直した判断と同じ）。
     // 0件でも3列・各ボードのセクションは必ず描画する。
     return (
-      <div className="grid gap-4 md:grid-cols-3">
-        {STATUSES.map((status) => {
-          const boardGroups = grouped[status]
-          return (
-            <StatusColumn
-              key={status}
-              title={STATUS_LABELS[status]}
-              // 列見出しの件数は「ボードごとの件数の合計」。reduceで1つずつ足し込む。
-              count={boardGroups.reduce((sum, group) => sum + group.cards.length, 0)}
-            >
-              {boardGroups.length === 0 ? (
-                // カードが0件なのではなく、ボード自体が1つも無い状態
-                // （lib/grouping.tsのgroupCardsByStatusAndBoardはboardsを事前登録するため、
-                // ボードが1つでもあればここには来ない）。
-                <p className="text-xs text-slate-400">ボードがありません。⚙ から作成してください</p>
-              ) : (
-                boardGroups.map((group) => (
-                  // keyはboardId（中身が変わっても揺れないID）を使う。
-                  // gap-2はh4見出し・カード一覧・（todo列のみ）追加フォームの3つを
-                  // 均等な間隔で縦に並べるため（3つとも常に揃っているとは限らない）。
-                  <div key={group.boardId} className="flex flex-col gap-2">
-                    {/* ▼ はワイヤーフレーム（03-screens.md 6.2③）に合わせた
-                        ボード別セクションの見出し記号。列見出し(h3)の下なのでh4にする。 */}
-                    <h4 className="text-xs font-semibold text-slate-500">▼ {group.boardName}</h4>
-                    {/* カードが0件のボードセクションでは、見出しの下に何も出さない
-                        （プロトタイプ同様、空の一覧に対して個別の「カードはまだありません」
-                        文言までは出さない。ボード×列の数だけノイズが増えるのを避けるため）。 */}
-                    {group.cards.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        {group.cards.map((card) => (
-                          <CardItem
-                            key={card.id}
-                            card={card}
-                            onSelect={(cardId) => setSelectedCardId(cardId)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {/* 「＋ カードを追加」はボードごとに1つ、未着手セクションの下にのみ置く
-                        （pages/BoardDetailView.tsxと同じくワイヤーフレーム6.2①の配置ルール。
-                        新規作成されたカードは常にstatus=todoなので置き場所もここ一択になる）。
-                        group.boardIdは常にnumberなので、BoardDetailView.tsxのような
-                        undefinedガードは不要（あちらはURLの文字列から変換していたため必要だった）。 */}
-                    {status === 'todo' && <CardCreateForm boardId={group.boardId} onCreated={refetch} />}
-                  </div>
-                ))
-              )}
-            </StatusColumn>
-          )
-        })}
-      </div>
+      <DndContext
+        sensors={dragAndDrop.sensors}
+        collisionDetection={closestCenter}
+        onDragStart={dragAndDrop.handleDragStart}
+        onDragEnd={dragAndDrop.handleDragEnd}
+      >
+        <div className="grid gap-4 md:grid-cols-3">
+          {STATUSES.map((status) => {
+            const boardGroups = grouped[status]
+            return (
+              <StatusColumn
+                key={status}
+                title={STATUS_LABELS[status]}
+                // 列見出しの件数は「ボードごとの件数の合計」。reduceで1つずつ足し込む。
+                count={boardGroups.reduce((sum, group) => sum + group.cards.length, 0)}
+              >
+                {boardGroups.length === 0 ? (
+                  // カードが0件なのではなく、ボード自体が1つも無い状態
+                  // （lib/grouping.tsのgroupCardsByStatusAndBoardはboardsを事前登録するため、
+                  // ボードが1つでもあればここには来ない）。
+                  <p className="text-xs text-slate-400">ボードがありません。⚙ から作成してください</p>
+                ) : (
+                  boardGroups.map((group) => (
+                    // keyはboardId（中身が変わっても揺れないID）を使う。
+                    // gap-2はh4見出し・カード一覧・（todo列のみ）追加フォームの3つを
+                    // 均等な間隔で縦に並べるため（3つとも常に揃っているとは限らない）。
+                    <div key={group.boardId} className="flex flex-col gap-2">
+                      {/* ▼ はワイヤーフレーム（03-screens.md 6.2③）に合わせた
+                          ボード別セクションの見出し記号。列見出し(h3)の下なのでh4にする。 */}
+                      <h4 className="text-xs font-semibold text-slate-500">▼ {group.boardName}</h4>
+                      {/* カードが0件のボードセクションでも、SortableCardList自体は描画する
+                          （emptyHintを渡さないため見た目には何も出ないが、ドロップ領域としては
+                          存在し続ける。プロトタイプ同様、空の一覧に「カードはまだありません」
+                          文言までは出さない、という以前からの方針は保っている）。 */}
+                      <SortableCardList
+                        id={columnId(status, group.boardId)}
+                        cards={group.cards}
+                        onSelect={(cardId) => setSelectedCardId(cardId)}
+                        onMoved={refetch}
+                      />
+                      {/* 「＋ カードを追加」はボードごとに1つ、未着手セクションの下にのみ置く
+                          （pages/BoardDetailView.tsxと同じくワイヤーフレーム6.2①の配置ルール。
+                          新規作成されたカードは常にstatus=todoなので置き場所もここ一択になる）。
+                          group.boardIdは常にnumberなので、BoardDetailView.tsxのような
+                          undefinedガードは不要（あちらはURLの文字列から変換していたため必要だった）。 */}
+                      {status === 'todo' && <CardCreateForm boardId={group.boardId} onCreated={refetch} />}
+                    </div>
+                  ))
+                )}
+              </StatusColumn>
+            )
+          })}
+        </div>
+
+        {/* ドラッグ中、ポインタに追従する見た目のコピー。activeCardがnull（ドラッグしていない）
+            間は何も描画しない。 */}
+        <DragOverlay>
+          {dragAndDrop.activeCard !== null && <CardDragPreview card={dragAndDrop.activeCard} />}
+        </DragOverlay>
+      </DndContext>
     )
   }
 
@@ -135,11 +156,14 @@ function CrossBoardView({ boards }: Props) {
     <section>
       <h2 className="mb-4 text-lg font-semibold">横断ビュー</h2>
       {renderContent()}
+      {dragAndDrop.error !== null && (
+        <StatusMessage kind="error">カードの移動に失敗しました：{dragAndDrop.error.message}</StatusMessage>
+      )}
       {/* selectedCardIdがnullのときCardDetailModalは何も描画しない(return null)。
           「開いているときだけ<CardDetailModal>をJSXに書く」のではなく、常に置いて
           cardIdの値で開閉を制御しているのは、モーダルの内部stateをReactに
           維持させ続けるため（都度マウント/アンマウントを避ける）。 */}
-      <CardDetailModal cardId={selectedCardId} onClose={() => setSelectedCardId(null)} />
+      <CardDetailModal cardId={selectedCardId} onUpdated={refetch} onClose={() => setSelectedCardId(null)} />
     </section>
   )
 }

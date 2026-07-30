@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { apiPaths } from '../api/client'
-import { useCreate } from '../hooks/useCreate'
+import { useMutation } from '../hooks/useMutation'
 import type { BoardCreateRequest, BoardResponse } from '../types/api'
 import StatusMessage from './StatusMessage'
 
@@ -28,7 +28,10 @@ type Props = {
  */
 function BoardManageModal({ open, boards, onCreated, onClose }: Props) {
   const [name, setName] = useState('')
-  const { create, submitting, error } = useCreate<BoardCreateRequest, BoardResponse>(apiPaths.createBoard())
+  const { mutate: create, submitting, error } = useMutation<BoardCreateRequest, BoardResponse>(
+    'POST',
+    apiPaths.createBoard(),
+  )
 
   // モーダルを開いた直後にボード名入力欄へフォーカスを当てる（CardCreateForm.tsxと同じ理由）。
   const nameInputRef = useRef<HTMLInputElement>(null)

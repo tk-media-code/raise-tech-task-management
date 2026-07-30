@@ -186,19 +186,19 @@ export async function postJson<TRequest, TResponse>(path: string, body: TRequest
 | `TRequest` | 送信するリクエストボディの型 | `CardCreateRequest` |
 | `TResponse` | 返ってくるレスポンスボディの型 | `CardResponse` |
 
-GETは「何を取得するか」（レスポンスの型）だけを指定すれば済みましたが、POSTは「何を送るか」と「何が返ってくるか」という**2つの独立した型**を扱う必要があります。この2つは同じ型になるとは限りません（実際、`CardCreateRequest`は`labelIds: number[]`という送信専用のフィールドを持つ一方、`CardResponse`は付与済みラベルの詳細（`labels: LabelResponse[]`）や`status`・`position`のようなサーバー側が決める値を持つ、別の形の型です）。`hooks/useCreate.ts`の`useCreate<TRequest, TResponse>`（[docs/react 19章](../react/08-form-and-mutation.md#19-書き込みpostとデータの更新)）も同じく2つの型引数を取り、`postJson`の型引数をそのまま中継しています。
+GETは「何を取得するか」（レスポンスの型）だけを指定すれば済みましたが、POST/PUT/PATCHは「何を送るか」と「何が返ってくるか」という**2つの独立した型**を扱う必要があります。この2つは同じ型になるとは限りません（実際、`CardCreateRequest`は`labelIds: number[]`という送信専用のフィールドを持つ一方、`CardResponse`は付与済みラベルの詳細（`labels: LabelResponse[]`）や`status`・`position`のようなサーバー側が決める値を持つ、別の形の型です）。`hooks/useMutation.ts`の`useMutation<TRequest, TResponse>`（[docs/react 19章](../react/08-form-and-mutation.md#19-書き込みpostとデータの更新)）も同じく2つの型引数を取り、`postJson`/`putJson`/`patchJson`の型引数をそのまま中継しています。
 
-### なぜPOSTは中断（`AbortSignal`）を受け取らないのか
+### なぜ書き込み系（POST/PUT/PATCH）は中断（`AbortSignal`）を受け取らないのか
 
-`fetchJson`との、もう1つの意図的な非対称があります。`postJson`は`signal`を引数に取りません。
+`fetchJson`との、もう1つの意図的な非対称があります。`postJson`・`putJson`・`patchJson`（内部で共通の`sendJson`に委譲する。カード編集・ステータス変更の実装にあわせて`postJson`から切り出された関数群）は、どれも`signal`を引数に取りません。
 
 ```typescript
 // fetchJson: signalを受け取る
 export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T>
 
-// postJson: signalを受け取らない
+// postJson / putJson / patchJson: signalを受け取らない
 export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse>
 ```
 
-GETの中断（[14章](#14-fetchとabortcontroller)）は、「表示しても無駄になった結果を捨てる」だけの安全な操作でした。中断してもサーバー側では単に参照が行われただけで、取り消すべき状態の変化はありません。POSTはそうはいきません。クライアント側で`fetch`を`abort()`しても、その時点でリクエストが既にサーバーに届いていれば、**サーバー側の処理（DBへの書き込み）は止まらない**可能性があります。「中断したつもりが、実際にはカードが作成されていた」という状態は、GETの中断より遥かに厄介な不整合です。`postJson`が`AbortSignal`を受け取れないようにしているのは、この非対称性を型のレベルで表現し、「POSTは一度始めたら最後まで見届ける」という設計意図を示すためです。
+GETの中断（[14章](#14-fetchとabortcontroller)）は、「表示しても無駄になった結果を捨てる」だけの安全な操作でした。中断してもサーバー側では単に参照が行われただけで、取り消すべき状態の変化はありません。書き込み系はそうはいきません。クライアント側で`fetch`を`abort()`しても、その時点でリクエストが既にサーバーに届いていれば、**サーバー側の処理（DBへの書き込み・更新）は止まらない**可能性があります。「中断したつもりが、実際にはカードが作成・更新されていた」という状態は、GETの中断より遥かに厄介な不整合です。これはPOSTだけでなくPUT・PATCHにも等しく当てはまるため、3つの関数がどれも同じく`AbortSignal`を受け取れないようにしています。この非対称性を型のレベルで表現し、「書き込み系は一度始めたら最後まで見届ける」という設計意図を示すためです。
 

@@ -113,4 +113,25 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
 	// 同一ステータスに存在した全カード」を母集団にしてはじめて保てるため、archivedは見ない。
 	@Query("select coalesce(max(c.position), 0) from Card c where c.board.id = :boardId and c.status = :status")
 	Integer findMaxPosition(@Param("boardId") Integer boardId, @Param("status") String status);
+
+	/**
+	 * 指定ボード・指定ステータスの列に表示されているカードを、表示順そのままで取得する。
+	 * ステータス変更（{@link com.tkmedia.taskmanagement.service.CardService#updateStatus}）で、
+	 * 移動先の列に挿入する位置を決めるために使う。
+	 *
+	 * @param boardId 対象ボードのID
+	 * @param status  対象ステータス（"todo" / "doing" / "done"）
+	 * @return 該当カードを表示順（position昇順→id昇順）で並べた一覧
+	 */
+	// findMaxPosition と異なり、こちらはアーカイブ済みカードを対象に含めない（isArchived = falseで絞る）。
+	// findMaxPositionは「これまでに採番された最大値」を知りたいだけなので、アーカイブ済みも母集団に
+	// 含めて重複採番を避ける必要があった。一方このメソッドは「クライアント（画面）が送ってくる
+	// 挿入位置（0始まりのインデックス）が、実際に何番目のカードを指すか」を突き止めるためのものであり、
+	// 画面には見えていないアーカイブ済みカードを混ぜてしまうと、同じインデックスの値でも
+	// 指す相手がずれてしまう。つまりこの2つのメソッドは「重複しない値を採番する」ことと
+	// 「画面上の並びを再現する」ことという、別の目的のために別の母集団を使い分けている。
+	// LabelRepository.findByBoardIdOrderByIdAsc等と同じく純粋な派生クエリ（メソッド名からJPQLが
+	// 自動生成される）のため、@Query使用時とは異なり@Paramは不要（引数はメソッドの宣言順で
+	// 機械的に対応付けられる）。
+	List<Card> findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc(Integer boardId, String status);
 }

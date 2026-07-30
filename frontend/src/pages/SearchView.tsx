@@ -148,7 +148,7 @@ function SearchView() {
     )
   }
 
-  const { data: cards, loading, error } = useApi<CardResponse[]>(
+  const { data: cards, loading, error, refetch } = useApi<CardResponse[]>(
     apiPaths.cards({
       keyword: debouncedKeyword === '' ? undefined : debouncedKeyword,
       labelIds: labelIdsInUrl.length > 0 ? labelIdsInUrl : undefined,
@@ -213,7 +213,7 @@ function SearchView() {
 
       {renderContent()}
 
-      <CardDetailModal cardId={selectedCardId} onClose={() => setSelectedCardId(null)} />
+      <CardDetailModal cardId={selectedCardId} onUpdated={refetch} onClose={() => setSelectedCardId(null)} />
     </section>
   )
 }

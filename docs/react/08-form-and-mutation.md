@@ -2,7 +2,7 @@
 
 [← React学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **18〜20章** をまとめています。
+> 元の学習ドキュメントにおける **18〜21章** をまとめています。
 
 ---
 
@@ -88,21 +88,27 @@ return <form onSubmit={handleSubmit}>{/* ... */}</form>
 
 ## 19. 書き込み（POST）とデータの更新
 
-### `useCreate`：書き込み専用のカスタムフック
+### `useCreate`から`useMutation`へ：書き込み専用のカスタムフック
 
 [04-custom-hooks.md 10章](./04-custom-hooks.md#10-カスタムフック)で見た`useApi`は、「pathの変化を検知して`useEffect`でGETする」という、コンポーネントの**描画に追従する**取得系の設計でした。POSTは性質が逆で、「ボタンを押すという明示的な操作」で一度だけ実行したい書き込みです。依存配列に乗せて自動発火させる`useEffect`とは相性が悪いため、`useApi`をそのまま使わず、新たに`useCreate`を用意しました。
 
+このフックは当初POST専用でしたが、カードの編集（PUT）・ステータス変更（PATCH）が実装された時点で、HTTPメソッドを引数として受け取る`useMutation`へ一般化されました（[docs/react 09-drag-and-drop.md](./09-drag-and-drop.md)参照）。現在の実装は次のとおりです。
+
 ```tsx
-export function useCreate<TRequest, TResponse>(path: string): UseCreateResult<TRequest, TResponse> {
+export function useMutation<TRequest, TResponse>(
+  method: HttpWriteMethod, // 'POST' | 'PUT' | 'PATCH'
+  path: string,
+): UseMutationResult<TRequest, TResponse> {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const create = useCallback(
+  const mutate = useCallback(
     async (request: TRequest): Promise<TResponse | null> => {
       setSubmitting(true)
       setError(null)
       try {
-        return await postJson<TRequest, TResponse>(path, request)
+        const send = method === 'POST' ? postJson : method === 'PUT' ? putJson : patchJson
+        return await send<TRequest, TResponse>(path, request)
       } catch (cause) {
         setError(cause instanceof ApiError ? cause : new Error(String(cause)))
         return null
@@ -110,14 +116,20 @@ export function useCreate<TRequest, TResponse>(path: string): UseCreateResult<TR
         setSubmitting(false)
       }
     },
-    [path],
+    [method, path],
   )
 
-  return { create, submitting, error }
+  return { mutate, submitting, error }
 }
 ```
 
-`data`/`loading`/`error`という`useApi`の骨格を、`submitting`/`error`という形で踏襲しつつ、中身は書き込み用に書き直しています。この「既存のフックがそのまま使えない用途では、低レベルな関数（`postJson`）を直接使い、data/loading/errorという骨格だけは同じ考え方を保つ」という判断は、`hooks/useLabelsByBoard.ts`が`useApi`ではなく`fetchJson`を直接使ったとき（[04-custom-hooks.md 10章](./04-custom-hooks.md#10-カスタムフック)）と同じです。カード作成・ボード作成の両方が同じ`useCreate<TRequest, TResponse>`を型引数だけ変えて使い回せるのは、[docs/typescript 7章](../typescript/03-generics.md#7-ジェネリクス)のジェネリクスのおかげです。
+`submitting`/`error`という骨格や、失敗時に例外を投げず`null`を返す設計、`useCallback`で安定させる理由は、POST専用だった頃の`useCreate`から一切変わっていません。変わったのは、`postJson`を直接呼んでいた箇所が「引数の`method`に応じて`postJson`・`putJson`・`patchJson`のいずれかを選ぶ」という1行に置き換わった点だけです。この「既存のフックがそのまま使えない用途では、低レベルな関数（`postJson`等）を直接使い、data/loading/errorという骨格だけは同じ考え方を保つ」という判断は、`hooks/useLabelsByBoard.ts`が`useApi`ではなく`fetchJson`を直接使ったとき（[04-custom-hooks.md 10章](./04-custom-hooks.md#10-カスタムフック)）と同じです。カード作成・カード編集・ボード作成のいずれも同じ`useMutation<TRequest, TResponse>`を型引数だけ変えて使い回せるのは、[docs/typescript 7章](../typescript/03-generics.md#7-ジェネリクス)のジェネリクスのおかげです。
+
+呼び出し側では、分割代入で`mutate`を`create`という別名に受け取っています（[21章](#21-フォームの中でネストした作成を行う)で見る`create`→`createLabel`と同じ「呼び出し側の文脈に合わせて分割代入時にリネームする」というテクニックです）。
+
+```tsx
+const { mutate: create, submitting, error } = useMutation<CardCreateRequest, CardResponse>('POST', apiPaths.createCard())
+```
 
 `create`が失敗時に**例外を投げず`null`を返す**設計にしているのは、呼び出し側（フォームの`onSubmit`）が`try`/`catch`を書かずに済むようにするためです。
 
@@ -172,7 +184,7 @@ const { data: cards, loading, error, refetch } = useApi<CardResponse[]>(path)
 
 ### `submitting`による二重送信防止
 
-`useCreate`が返す`submitting`は、送信ボタンの`disabled`条件（[18章](#18-フォームの実装)）に組み込まれています。
+`useMutation`が返す`submitting`は、送信ボタンの`disabled`条件（[18章](#18-フォームの実装)）に組み込まれています。
 
 ```tsx
 disabled={title.trim() === '' || submitting}
@@ -256,7 +268,9 @@ return <input ref={titleInputRef} type="text" /* ... */ />
 
 ## 21. フォームの中でネストした作成を行う
 
-要件定義5.5「ラベル管理」に対応するため、`components/CardCreateForm.tsx`（カード新規作成フォーム）の中に、もう1つの小さな作成フォーム（ラベルの新規作成）を組み込みました。「フォームの中にフォームがある」入れ子の構造は本プロジェクト初めてで、これまでの章の考え方をいくつか組み合わせて実現しています。
+要件定義5.5「ラベル管理」に対応するため、カード新規作成フォームの中に、もう1つの小さな作成フォーム（ラベルの新規作成）を組み込みました。「フォームの中にフォームがある」入れ子の構造は本プロジェクト初めてで、これまでの章の考え方をいくつか組み合わせて実現しています。
+
+> 📄 この節のコードは当初`components/CardCreateForm.tsx`に直接書かれていましたが、カード編集（`CardDetailModal`）でも同じラベル選択・作成UIが必要になったため、`components/LabelPicker.tsx`という独立したコンポーネントへ切り出しました（[09-drag-and-drop.md](./09-drag-and-drop.md)参照）。以下のコード例・説明は「入れ子フォームであることに起因する問題」という当時からの本質は変わっていないため、ファイルの引っ越し以外はそのまま通用します。呼び出し元がカード作成フォームか、カード編集モーダルかによらず、`LabelPicker`は「選択中のラベルID一覧」と「変わったときに呼ぶ関数」だけをpropsで受け取るcontrolledなコンポーネントです。
 
 ### `<form>`は入れ子にできない
 
@@ -311,19 +325,19 @@ async function handleCreateLabel() {
 
 `event.preventDefault()`を呼んでから`handleCreateLabel()`を呼ぶことで、「このEnterはラベル作成に向けたものだ」とReactに伝えています。1つの`<form>`の中に「カードを送信する」「ラベルを作成する」という2つの送信意図が同居しているからこそ、Enterキーの向き先をどちらにするかをコードで明示しなければならない、という`<form>`1つだけの単純な構成では出てこなかった問題です。
 
-### 2つ目の`useCreate`——送信中・エラーを独立させる
+### 2つ目の`useMutation`——送信中・エラーを独立させる
 
-`CardCreateForm`は[19章](#19-書き込みpostとデータの更新)の`useCreate`を、型引数を変えて2回呼び出しています。
+ラベル作成のコンポーネント（後述のとおり、現在は`components/LabelPicker.tsx`）は、[19章](#19-書き込みpostとデータの更新)の`useMutation`を、カード（またはボード）本体の送信とは別に、もう一度呼び出しています。
 
 ```tsx
-const { create, submitting, error } =
-  useCreate<CardCreateRequest, CardResponse>(apiPaths.createCard())
+const { mutate: create, submitting, error } =
+  useMutation<CardCreateRequest, CardResponse>('POST', apiPaths.createCard())
 
-const { create: createLabel, submitting: creatingLabel, error: labelError } =
-  useCreate<LabelCreateRequest, LabelResponse>(apiPaths.boardLabels(boardId))
+const { mutate: createLabel, submitting: creatingLabel, error: labelError } =
+  useMutation<LabelCreateRequest, LabelResponse>('POST', apiPaths.boardLabels(boardId))
 ```
 
-同じフックを同じコンポーネントの中で2回呼ぶこと自体は、[9章](./03-state-effect.md#9-フックのルール)の「フックのルール」に反しません（ループや条件分岐の中で呼ばない限り、フックは何度でも呼べます）。分割代入の変数名を`create`→`createLabel`、`submitting`→`creatingLabel`のように**別名で受け取る**ことで、1つのコンポーネントの中に「カード送信用の状態」と「ラベル作成用の状態」という2組の`submitting`/`error`が、互いに独立して存在できます。もし1つの`useCreate`を使い回そうとすると、ラベル作成中はカードの送信ボタンまで`submitting`扱いになってしまう（またはその逆）という、意図しない結合が生まれていたはずです。
+同じフックを同じコンポーネントツリーの中で2回呼ぶこと自体は、[9章](./03-state-effect.md#9-フックのルール)の「フックのルール」に反しません（ループや条件分岐の中で呼ばない限り、フックは何度でも呼べます）。分割代入の変数名を`mutate`→`create`／`createLabel`、`submitting`→`creatingLabel`のように**別名で受け取る**ことで、「カード送信用の状態」と「ラベル作成用の状態」という2組の`submitting`/`error`が、互いに独立して存在できます。もし1つの`useMutation`インスタンスを使い回そうとすると、ラベル作成中はカードの送信ボタンまで`submitting`扱いになってしまう（またはその逆）という、意図しない結合が生まれていたはずです。
 
 ### 子リソースの作成結果を、親の保留中stateへ反映する
 
