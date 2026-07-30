@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { fetchJson } from '../api/client'
 
 /**
@@ -14,6 +14,17 @@ export type UseApiResult<T> = {
   loading: boolean
   /** 失敗した場合のエラー。成功時・読み込み中はnull */
   error: Error | null
+  /**
+   * 同じpathへ再度GETを実行し、data/loading/errorを更新する。
+   * カードやボードの新規作成（POST）が成功したあと、その変更を画面に反映させるために使う
+   * （docs/react/08-form-and-mutation.md 19章参照）。
+   *
+   * 楽観的更新（ローカルのdata配列にその場で1件足す）ではなく、必ずサーバーに再取得しに行く
+   * 設計にしているのは、カードの並び順（position）がサーバー側だけが把握している情報で、
+   * lib/grouping.tsもフロントエンド側では一切ソートしない前提になっているため。
+   * ローカルで配列に追加すると、この「並び順はサーバーが決める」という契約が崩れてしまう。
+   */
+  refetch: () => void
 }
 
 /**
@@ -43,6 +54,10 @@ export function useApi<T>(path: string | null): UseApiResult<T> {
   // useStateの引数は初回レンダリング時にしか使われない（2回目以降は無視される）。
   const [loading, setLoading] = useState(path !== null)
   const [error, setError] = useState<Error | null>(null)
+  // reloadCountは値そのものに意味はなく、「増えた」という事実だけを使う。
+  // pathは変わっていないのにuseEffectをもう一度実行させたい（＝再取得したい）ときの
+  // トリガーとして、依存配列に加える専用のstate。
+  const [reloadCount, setReloadCount] = useState(0)
 
   useEffect(() => {
     // pathがnullのときは通信せず、前回の結果だけ片付けて終わる。
@@ -97,8 +112,23 @@ export function useApi<T>(path: string | null): UseApiResult<T> {
     return () => {
       controller.abort()
     }
-  }, [path]) // 依存配列。pathが変わったときだけ、この効果を実行し直す。
+  }, [path, reloadCount]) // 依存配列。pathが変わったとき「または」reloadCountが変わったときに、この効果を実行し直す。
   // 空配列[]なら初回だけ、配列そのものを省略すると毎レンダリング実行される（＝無限ループ）。
 
-  return { data, loading, error }
+  // useCallbackで関数自体を安定させる（依存配列が空なので、このフックが返すrefetchは
+  // 呼び出し側の再レンダリングをまたいで常に同じ関数インスタンスであり続ける）。
+  // ここを素の関数式のままにすると、useApiを呼んでいるコンポーネントが再レンダリングされるたびに
+  // 新しいrefetch関数が作られ、それをuseEffectの依存配列に置いている呼び出し側
+  // （例: components/CardCreateForm.tsx）で意図しない再実行を招きかねない。
+  //
+  // setReloadCount(c => c + 1) という「更新関数を渡す」形（関数型更新）を使っているのは、
+  // このコールバック定義時点のreloadCountの値をクロージャに閉じ込めず、実行時点の最新値を
+  // Reactから受け取るため。もし setReloadCount(reloadCount + 1) と書くと、依存配列を空にした
+  // 弊害でクロージャが常に初回描画時のreloadCount（0）を見続けてしまい、2回目以降のrefetchが
+  // 効かなくなる（0+1=1にしかならない）。
+  const refetch = useCallback(() => {
+    setReloadCount((count) => count + 1)
+  }, [])
+
+  return { data, loading, error, refetch }
 }

@@ -11,8 +11,10 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.Check;
 import org.hibernate.annotations.ColumnDefault;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -42,8 +44,11 @@ public class Card {
 	@OnDelete(action = OnDeleteAction.CASCADE)
 	private Board board;
 
-	// タイトル。NOT NULL制約（必須項目）
-	@Column(nullable = false)
+	// タイトル。NOT NULL制約（必須項目）。
+	// length = 200 はDBカラムをvarchar(200)にする指定（アプリ側の @Size(max = 200) と揃える多重防御。
+	// docs/spring-boot/09-write-api-validation.md 29章参照）。prototype/index.htmlのmaxlength="200"を踏襲した値で、
+	// 要件定義に文字数の規定があるわけではない。
+	@Column(nullable = false, length = 200)
 	private String title;
 
 	// 説明・メモ。任意項目のため、長文を格納できるtext型とする
@@ -68,14 +73,26 @@ public class Card {
 	@Column(nullable = false)
 	private Integer position;
 
-	// 作成日時。DB側のDEFAULT（now()）に対応させる
+	// 作成日時。
+	// @ColumnDefault("now()") はDDL（CREATE TABLE）にDB側のDEFAULT式を刻むだけで、
+	// Hibernateが発行するINSERT文はこのカラムを含め全カラムを明示的に列挙するため、
+	// Javaの値がnullのままだとDEFAULTは使われずNOT NULL制約違反になる
+	// （db/seed/dummy-data.sqlのような、Hibernateを経由しない直接INSERTのための保険として残している）。
+	// @CreationTimestampはHibernate独自の拡張で、INSERT直前にJava側（アプリケーションサーバーの時刻）で
+	// 現在時刻を採番してこのフィールドへ自動的にセットしてくれる。
+	// これによりCardService側でnew Card().setCreatedAt(...)を書かずに済む
+	// （docs/spring-boot/09-write-api-validation.md 31章参照）。
 	@Column(name = "created_at", nullable = false)
 	@ColumnDefault("now()")
+	@CreationTimestamp
 	private OffsetDateTime createdAt;
 
-	// 更新日時。DB側のDEFAULT（now()）に対応させる
+	// 更新日時。@UpdateTimestampはINSERT時はcreatedAtと同じくJava側で現在時刻をセットし、
+	// UPDATE時（今回はまだ未実装）にも自動的に値を更新し直してくれる。createdAtとの役割分担は
+	// 「作成時刻は不変」「更新時刻は変更のたびに動く」という違いのみ。
 	@Column(name = "updated_at", nullable = false)
 	@ColumnDefault("now()")
+	@UpdateTimestamp
 	private OffsetDateTime updatedAt;
 
 	public Integer getId() {

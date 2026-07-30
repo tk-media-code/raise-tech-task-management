@@ -24,6 +24,7 @@
 | 13〜14章 | React Routerによるルーティング | [05-router.md](./05-router.md) |
 | 15章 | コンポーネント設計と状態の持ち方 | [06-component-design.md](./06-component-design.md) |
 | 16〜17章 | npm・Viteとビルド周りの設定 | [07-build-tooling.md](./07-build-tooling.md) |
+| 18〜20章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
 
 ## 目次
 
@@ -44,6 +45,9 @@
 15. [コンポーネント設計と状態の持ち方](./06-component-design.md#15-コンポーネント設計と状態の持ち方)
 16. [npm・Vite・tsconfigと環境変数](./07-build-tooling.md#16-npmvitetsconfigと環境変数)
 17. [Tailwind CSSの読み方](./07-build-tooling.md#17-tailwind-cssの読み方)
+18. [フォームの実装](./08-form-and-mutation.md#18-フォームの実装)
+19. [書き込み（POST）とデータの更新](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
+20. [`useRef`とDOMへの直接アクセス](./08-form-and-mutation.md#20-userefとdomへの直接アクセス)
 
 ---
 
@@ -145,7 +149,7 @@
 
 ## 13. React Routerの基本
 
-`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。
+`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点も扱います。
 
 📄 詳細：[05-router.md](./05-router.md#13-react-routerの基本)
 
@@ -161,7 +165,7 @@
 
 ## 15. コンポーネント設計と状態の持ち方
 
-`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。
+`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。横断ビューで`CardCreateForm`をボードの数だけ並べたとき、stateがインスタンスごとに独立して管理される（＝1つしか開けないという制約を自前で書く必要が無い）ことも扱います。
 
 📄 詳細：[06-component-design.md](./06-component-design.md#15-コンポーネント設計と状態の持ち方)
 
@@ -183,21 +187,43 @@
 
 ---
 
+## 18. フォームの実装
+
+本プロジェクト初めての`<form>`・`onSubmit`・`preventDefault`を、カード追加フォーム・ボード管理モーダルを教材に解説します。要件5.2「タイトル未入力なら追加ボタンを無効化する」の実装、入力を個別の`useState`に分けた理由、開閉状態を持つフォームの設計も扱います。
+
+📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#18-フォームの実装)
+
+---
+
+## 19. 書き込み（POST）とデータの更新
+
+`useApi`をそのまま使えない書き込み処理のために新設した`useCreate`、書き込み後に一覧を最新化する`refetch`、そして「なぜ楽観的更新にしないのか」（並び順の決定権はサーバーにあるという契約）を解説します。ボード一覧のstateを`App.tsx`へリフトアップした経緯——Contextに飛びつく前にまず検討すべき選択肢としてのリフトアップ——と、そのリフトアップが横断ビューへの`boards`受け渡しにもそのまま活きた経緯も扱います。
+
+📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
+
+---
+
+## 20. `useRef`とDOMへの直接アクセス
+
+フォームを開いた瞬間にタイトル入力欄へ自動でフォーカスを当てる実装を教材に、`useRef`と`useState`の違い（値の変化が再描画を引き起こすかどうか）、`useEffect`の中でDOM操作を行う理由を解説します。
+
+📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#20-userefとdomへの直接アクセス)
+
+---
+
 ## 付録：このドキュメントで扱っていないReactの機能
 
 Reactの入門書には載っているのに、本プロジェクトのコードには一度も登場しない機能があります。「知らないのは自分だけでは」と迷わないよう、意図的に扱っていない機能と、その理由をまとめておきます。
 
 | 機能 | 本プロジェクトに登場しない理由 |
 | --- | --- |
-| Context（`useContext`） | [15章](#15-コンポーネント設計と状態の持ち方)で述べたとおり、共有すべき状態がまだ複雑でなく、各コンポーネントが独立してデータを取得する方針で足りている |
+| Context（`useContext`） | [19章](#19-書き込みpostとデータの更新)で述べたとおり、ボード一覧の共有が必要になった際も、消費者がまだ2つ（`BoardSelect`・`BoardManageModal`）だけのためリフトアップで足りている。消費者がさらに増えたときの検討課題として残る |
 | `useReducer` | state更新のロジックが単純で、`useState`（[7章](#7-stateとusestate)）で足りている |
-| `useCallback` | 値の再計算を抑制する`useMemo`（[12章](#12-usememoと再計算の抑制)）は使われているが、関数自体をメモ化する必要がある場面はまだ登場していない |
-| `useRef` | DOM要素への直接アクセスや、再描画を伴わない値の保持がまだ必要になっていない |
 | `React.memo`（コンポーネントの再描画抑制） | 再描画コストが問題になるほど重いコンポーネントがまだ無い |
 | エラーバウンダリ | 現状のエラー処理はAPI通信の失敗（[11章](#11-データ取得の3状態とレースコンディション)のstate）に限られ、予期しない描画エラー自体を捕捉する仕組みは未導入 |
-| ドラッグ＆ドロップ | ステータスの変更はドラッグ＆ドロップで行う設計（要件5.3）だが、書き込みAPI（PUT）が未実装のため見送られている |
+| ドラッグ＆ドロップ | ステータスの変更はドラッグ＆ドロップで行う設計（要件5.3）だが、更新系API（PUT）が未実装のため見送られている |
 
-これらの機能は、Write系API（POST/PUT/DELETE）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
+`useCallback`（[19章](#19-書き込みpostとデータの更新)の`useApi.refetch`・`useCreate.create`）・`useRef`（[20章](#20-userefとdomへの直接アクセス)）は、カード・ボードの新規作成の実装にあわせて登場したため、このリストから外れました。残る機能も、Write系API（PUT/DELETE）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
 
 ## このドキュメントの更新ルール
 

@@ -1,13 +1,19 @@
 package com.tkmedia.taskmanagement.controller;
 
+import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.service.BoardService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 
 /**
@@ -59,5 +65,18 @@ public class BoardController {
 	@GetMapping("/{id}/labels")
 	public List<LabelResponse> listLabels(@PathVariable Integer id) {
 		return boardService.findLabelsByBoardId(id);
+	}
+
+	/**
+	 * ボードを新規作成する。
+	 *
+	 * @param request リクエストボディ（ボード名）。{@code @Valid}によりBean Validationが
+	 *                このメソッドの実行前に検証する（CardController.createと同じ仕組み）
+	 * @return 作成したボード（HTTPステータス201、{@code Location}ヘッダーに作成先URLを添えて返す）
+	 */
+	@PostMapping
+	public ResponseEntity<BoardResponse> create(@Valid @RequestBody BoardCreateRequest request) {
+		BoardResponse created = boardService.create(request);
+		return ResponseEntity.created(URI.create("/api/boards/" + created.id())).body(created);
 	}
 }

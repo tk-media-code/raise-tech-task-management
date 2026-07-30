@@ -2,7 +2,7 @@ import { apiPaths } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { useLabelsByBoard } from '../hooks/useLabelsByBoard'
 import type { BoardResponse } from '../types/api'
-import LabelFilterChip from './LabelFilterChip'
+import LabelToggleChip from './LabelToggleChip'
 import StatusMessage from './StatusMessage'
 
 type Props = {
@@ -54,7 +54,7 @@ function LabelFilterBar({ selectedLabelIds, onToggle }: Props) {
           <p className="mb-1 text-xs font-semibold text-slate-500">{board.name}</p>
           <div className="flex flex-wrap gap-1">
             {(labelsByBoard?.[board.id] ?? []).map((label) => (
-              <LabelFilterChip
+              <LabelToggleChip
                 key={label.id}
                 label={label}
                 selected={selectedLabelIds.includes(label.id)}

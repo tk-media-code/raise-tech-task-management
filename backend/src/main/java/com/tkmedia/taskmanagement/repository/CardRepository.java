@@ -93,4 +93,24 @@ public interface CardRepository extends JpaRepository<Card, Integer> {
 	 */
 	@Query("select c from Card c join fetch c.board where c.id = :id")
 	Optional<Card> findByIdWithBoard(@Param("id") Integer id);
+
+	/**
+	 * 指定ボード・指定ステータス内で、現在使われている最大のposition値を取得する。
+	 * カード新規作成時、この戻り値+1を新しいカードのpositionとして採番するために使う
+	 * （docs/spring-boot/09-write-api-validation.md 31章参照）。
+	 *
+	 * @param boardId 対象ボードのID
+	 * @param status  対象ステータス（"todo" / "doing" / "done"）
+	 * @return 現在の最大position。該当カードが1件も無い場合は0（coalesceによる既定値。
+	 *         集約関数maxは対象行が0件だとSQL標準上NULLを返すため、そのままだと
+	 *         「0件のときの初期値」をJava側で毎回if分岐する必要が生じる。coalesceでSQL側にJavaの
+	 *         Optional.orElse相当の処理をさせておくことで、呼び出し側は常にInteger値を1加算するだけで済む）
+	 */
+	// アーカイブ済みのカードもこの集計の対象に含めている（archivedによる絞り込みをしていない）。
+	// もしアーカイブ済みを除外すると、「todo列に3件→全部アーカイブ→新規作成」のケースで
+	// positionが1から採番され直し、アーカイブ済みカードを復帰させたときに同じpositionの
+	// カードが2件できてしまう（表示順が不定になる）。position の一意性は「同一ボード・
+	// 同一ステータスに存在した全カード」を母集団にしてはじめて保てるため、archivedは見ない。
+	@Query("select coalesce(max(c.position), 0) from Card c where c.board.id = :boardId and c.status = :status")
+	Integer findMaxPosition(@Param("boardId") Integer boardId, @Param("status") String status);
 }

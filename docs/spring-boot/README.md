@@ -25,6 +25,7 @@
 | 20〜23章 | Service層・Controller層・DTO・例外処理 | [06-service-controller.md](./06-service-controller.md) |
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
+| 28〜31章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
 
 ## 目次
 
@@ -55,6 +56,10 @@
 25. [open-in-viewと遅延読み込みの境界](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)
 26. [`@Configuration`とBean定義](./08-configuration-cors.md#26-configurationとbean定義)
 27. [CORSとフロントエンドとの接続](./08-configuration-cors.md#27-corsとフロントエンドとの接続)
+28. [登録系API（POST）の作り方](./09-write-api-validation.md#28-登録系apipostの作り方)
+29. [リクエストDTOとBean Validation](./09-write-api-validation.md#29-リクエストdtoとbean-validation)
+30. [バリデーションエラーを400で返す](./09-write-api-validation.md#30-バリデーションエラーを400で返す)
+31. [登録処理の中身](./09-write-api-validation.md#31-登録処理の中身)
 
 ---
 
@@ -271,6 +276,38 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 フロントエンド（`http://localhost:5173`）とバックエンド（`http://localhost:8080`）が別オリジンになるため必要になる、CORS（Cross-Origin Resource Sharing）の設定を解説します。同一オリジンポリシーの仕組み、単純リクエストとプリフライトの違い、`CorsConfig`の実装、そして`curl`による動作確認までを扱います。
 
 📄 詳細：[08-configuration-cors.md](./08-configuration-cors.md#27-corsとフロントエンドとの接続)
+
+---
+
+## 28. 登録系API（POST）の作り方
+
+本プロジェクト初の`@PostMapping`・`@RequestBody`を、カード・ボードそれぞれの新規作成APIを教材に解説します。GET系メソッドが素の型を返すのに対し、POSTは`ResponseEntity`でステータスコード（201 Created）と`Location`ヘッダーをまとめて返す理由を扱います。
+
+📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#28-登録系apipostの作り方)
+
+---
+
+## 29. リクエストDTOとBean Validation
+
+`spring-boot-starter-validation`の導入と、`@NotNull`・`@NotBlank`・`@Size`によるリクエストDTOの検証を解説します。レスポンスDTO（22章）との性格の違い、フォームの`disabled`→Bean Validation→DBの制約という3層の多重防御の考え方も扱います。
+
+📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#29-リクエストdtoとbean-validation)
+
+---
+
+## 30. バリデーションエラーを400で返す
+
+`MethodArgumentNotValidException`を400のProblemDetailに変換する自前のハンドラを解説します。Spring Boot既定の`ProblemDetailsExceptionHandler`と自前のハンドラが同じ優先度で競合し、`@Order`を明示するまで自前のハンドラが呼ばれなかった実際の落とし穴も扱います。
+
+📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#30-バリデーションエラーを400で返す)
+
+---
+
+## 31. 登録処理の中身
+
+書き込み側の`@Transactional`によるクラス既定`readOnly=true`の上書き、`@CreationTimestamp`/`@UpdateTimestamp`と`@ColumnDefault`の役割分担（`@ColumnDefault`だけではNOT NULL制約違反になる実例）、positionの採番方法、`findById`と`getReferenceById`の使い分け、複合主キーエンティティの`save()`が`persist`か`merge`かを決める`isNew()`の仕組みを解説します。
+
+📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#31-登録処理の中身)
 
 ---
 

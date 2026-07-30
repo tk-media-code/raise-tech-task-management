@@ -1,4 +1,4 @@
-import type { CardResponse, CardStatus } from '../types/api'
+import type { BoardResponse, CardResponse, CardStatus } from '../types/api'
 import { isCardStatus } from './status'
 
 /** 横断ビューで、1つのステータス列の中に置くボード別セクション1つぶん */
@@ -20,16 +20,29 @@ export type GroupedCards = Record<CardStatus, BoardGroup[]>
  * この関数はフロント側で並べ替えを一切行わない。Mapが「キーを最初に入れた順」を保つ性質だけで、
  * サーバーが決めた表示順（ボードのposition順）がそのまま結果に写る。
  *
- * プロトタイプ（prototype/app.js）は空のボードセクションも「▼ ボード名」として
- * 表示するが、ここではカードから導出するため、1枚もカードが無いボードのセクションは
- * 出てこない。単一リクエストで完結させたいことと、3ボード×3列ぶんの空見出しが
- * ノイズになることを優先した判断（プロトタイプに合わせたくなったら、ボード一覧を
- * 引数に追加して各Mapを先に埋めておく形に変更できる）。
+ * プロトタイプ（prototype/app.js の buildQuickAddHtml/buildCrossViewHtml）は、横断ビューの
+ * 未着手列でも各ボードから「＋ カードを追加」できるようにするため、カードが1枚も無い
+ * ボードのセクションも「▼ ボード名」として表示していた。当初はカードから導出する
+ * だけの実装にしていたためこの挙動が抜け落ちていたが、それでは「カードが1枚も無い
+ * ボード」に横断ビューから追加する手段が無くなってしまう（ボード詳細画面まで
+ * 遷移しないといけない）。そこで第2引数にボード一覧を受け取り、カードを走査する
+ * “前”に3つのステータスすべてへ空のBoardGroupを先に登録しておく形にした
+ * （board.position順はboardsの並び順＝BoardRepository.findAllByOrderByPositionAscIdAsc
+ * の結果がそのまま反映される）。
+ *
+ * boardsがnull（App.tsx側でボード一覧が未取得・取得失敗）のときは事前登録をスキップし、
+ * 従来どおりカードから導出するだけのフォールバックにする。ボード一覧が引けなくても、
+ * 少なくともカードのあるボードだけは表示され続ける。
  *
  * @param cards GET /api/cards の結果。読み込み中はnullが渡ってくる
- * @returns 3つのステータスすべてをキーに持つオブジェクト（該当カードが無いステータスは空配列）
+ * @param boards GET /api/boards の結果（App.tsxが取得済みのものをそのまま渡す）。
+ *   未取得・取得失敗のときはnull
+ * @returns 3つのステータスすべてをキーに持つオブジェクト（該当ボードが無いステータスは空配列）
  */
-export function groupCardsByStatusAndBoard(cards: CardResponse[] | null): GroupedCards {
+export function groupCardsByStatusAndBoard(
+  cards: CardResponse[] | null,
+  boards: BoardResponse[] | null,
+): GroupedCards {
   // Map<ボードID, BoardGroup> をステータスごとに用意する。
   // Recordで todo/doing/done の3キーを型で強制しているので、
   // 将来ステータスが増えたときにここを書き忘れるとコンパイルエラーになって気づける。
@@ -37,6 +50,18 @@ export function groupCardsByStatusAndBoard(cards: CardResponse[] | null): Groupe
     todo: new Map(),
     doing: new Map(),
     done: new Map(),
+  }
+
+  // カードを見る前に、全ボード×全ステータスぶんの空セクションを先に作っておく。
+  // これにより「カードが1枚も無いボード」もセクション自体は出現するようになる
+  // （中身のcardsが空配列のまま、というだけ）。boardsがnullの間はこのブロックを
+  // 丸ごとスキップする＝カード起点の従来ロジックだけで動くフォールバックになる。
+  if (boards !== null) {
+    for (const board of boards) {
+      byStatus.todo.set(board.id, { boardId: board.id, boardName: board.name, cards: [] })
+      byStatus.doing.set(board.id, { boardId: board.id, boardName: board.name, cards: [] })
+      byStatus.done.set(board.id, { boardId: board.id, boardName: board.name, cards: [] })
+    }
   }
 
   // `cards ?? []` は「nullなら空配列として扱う」という書き方。
@@ -51,13 +76,16 @@ export function groupCardsByStatusAndBoard(cards: CardResponse[] | null): Groupe
       continue
     }
 
-    const boards = byStatus[card.status]
-    let group = boards.get(card.boardId)
+    // 外側の引数`boards`（ボード一覧）とは別物なので、シャドーイングを避けて別名にする。
+    const sectionsForStatus = byStatus[card.status]
+    let group = sectionsForStatus.get(card.boardId)
     if (group === undefined) {
-      // このステータス列でそのボードが初めて登場した瞬間にセクションを作る。
-      // ＝セクションの並び順は「最初に登場した順」＝board.position順になる。
+      // 通常は上の事前登録で必ず見つかるはずだが、boardsがnullだったフォールバック時、
+      // または（本来起き得ないが）ボード一覧に無いboardIdのカードが来た場合に備えて、
+      // ここで初めて登場した時点でもセクションを作れるようにしておく。
+      // その場合のセクションの並び順は「カード配列内で最初に登場した順」になる。
       group = { boardId: card.boardId, boardName: card.boardName, cards: [] }
-      boards.set(card.boardId, group)
+      sectionsForStatus.set(card.boardId, group)
     }
     // pushはサーバーが返した順に積むだけ。card.position順もここで自然に保たれる。
     group.cards.push(card)

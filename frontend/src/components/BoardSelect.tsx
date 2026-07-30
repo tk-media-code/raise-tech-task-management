@@ -1,7 +1,5 @@
 import type { ChangeEvent } from 'react'
 import { useMatch, useNavigate } from 'react-router'
-import { apiPaths } from '../api/client'
-import { useApi } from '../hooks/useApi'
 import type { BoardResponse } from '../types/api'
 
 /**
@@ -9,6 +7,15 @@ import type { BoardResponse } from '../types/api'
  * ボードIDは数値なので、それと衝突しない文字列にしておく。
  */
 const ALL_BOARDS = 'all'
+
+type Props = {
+  /** ボード一覧。読み込み中・未取得はnull（App.tsxのuseApiの結果をそのまま受け取る） */
+  boards: BoardResponse[] | null
+  /** ボード一覧の取得中かどうか */
+  loading: boolean
+  /** ボード一覧の取得に失敗した場合のエラー */
+  error: Error | null
+}
 
 /**
  * 画面上部のボード切替セレクトボックス（要件定義 5.1／6.2）。
@@ -18,11 +25,19 @@ const ALL_BOARDS = 'all'
  * 切り替えてもこのコンポーネント自体はアンマウントされないため、ボード一覧の
  * 再取得も選択状態のちらつきも起きない。ページ側に置くと、遷移のたびに
  * アンマウント→再マウントが起きて毎回 GET /api/boards を叩き直すことになる。
+ *
+ * ボード一覧はこのコンポーネント自身では取得せず、App.tsxからpropsで受け取る形に変更した
+ * （元は「データ取得の責務はそれを必要とするコンポーネントに閉じ込める」という方針で
+ * このコンポーネント自身がuseApiを呼んでいた）。ボード管理モーダル（BoardManageModal）の
+ * 新規作成が成功した直後、このセレクトボックスの選択肢にも同じ一覧を反映する必要が生まれ、
+ * 「一覧を必要とするコンポーネントが2つ（このセレクトボックスと管理モーダル）」になった時点で、
+ * 各自が独立して取得する方針は成立しなくなった。片方の変更をもう片方に伝える手段が無いため、
+ * 状態をより上位の共通の親（App.tsx）へ引き上げ（リフトアップ）、両者に同じ値をpropsで
+ * 配ることにした。Context（docs/react/README.md 付録）は導入していない。消費者がまだ2つだけで、
+ * App.tsxからpropsで配るだけで足りる規模である間は、Contextを持ち込むと「値がどこから来るか」を
+ * 追うための間接層が増えるだけで見合わないと判断したため（docs/react/06-component-design.md 15章参照）。
  */
-function BoardSelect() {
-  // ボード一覧はこのコンポーネント自身が取りに行く。App.tsxを「レイアウトを書くだけ」の
-  // 状態に保ちたいので、データ取得の責務はそれを必要とするコンポーネントに閉じ込める。
-  const { data: boards, loading, error } = useApi<BoardResponse[]>(apiPaths.boards())
+function BoardSelect({ boards, loading, error }: Props) {
   const navigate = useNavigate()
 
   // 現在どのボードを見ているかを、useStateではなくURLから導き出す。

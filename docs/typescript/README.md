@@ -22,7 +22,7 @@
 | 7〜8章 | ジェネリクスとユーティリティ型 | [03-generics.md](./03-generics.md) |
 | 9〜10章 | 型の絞り込みとアサーション | [04-narrowing.md](./04-narrowing.md) |
 | 11〜12章 | クラスとモジュール | [05-class-module.md](./05-class-module.md) |
-| 13〜14章 | 非同期処理（`Promise`・`fetch`・`AbortController`） | [06-async.md](./06-async.md) |
+| 13〜15章 | 非同期処理（`Promise`・`fetch`・`AbortController`・POST） | [06-async.md](./06-async.md) |
 
 ## 目次
 
@@ -40,6 +40,7 @@
 12. [モジュールと`import type`](./05-class-module.md#12-モジュールとimport-type)
 13. [`Promise`と`async`・`await`](./06-async.md#13-promiseとasyncawait)
 14. [`fetch`と`AbortController`](./06-async.md#14-fetchとabortcontroller)
+15. [`fetch`でのPOSTとリクエストボディ](./06-async.md#15-fetchでのpostとリクエストボディ)
 
 ---
 
@@ -155,6 +156,14 @@ JavaScriptに静的型付けを追加した言語で、型注釈は最終的に�
 
 ---
 
+## 15. `fetch`でのPOSTとリクエストボディ
+
+カード・ボードの新規作成で新設した`postJson`を教材に、`fetch`の`method`/`headers`/`body`オプション、`JSON.stringify`によるオブジェクト→JSON文字列変換、送信用・受信用の2つの型引数を取るジェネリクス関数、そして「なぜPOSTは`AbortSignal`を受け取らないのか」というGETとの非対称性を解説します。
+
+📄 詳細：[06-async.md](./06-async.md#15-fetchでのpostとリクエストボディ)
+
+---
+
 ## 付録：このドキュメントで扱っていないTypeScriptの機能
 
 TypeScriptの入門書には載っているのに、本プロジェクトのコードには一度も登場しない機能があります。「知らないのは自分だけでは」と迷わないよう、意図的に扱っていない機能と、その理由をまとめておきます。
@@ -170,7 +179,7 @@ TypeScriptの入門書には載っているのに、本プロジェクトのコ�
 | 判別可能なユニオン（discriminated union） | 現状のユニオン型はリテラル1種類のみの単純な形（[5章](#5-ユニオン型とリテラル型)）。複数のプロパティを持つバリアントを`type`や`status`フィールドで判別する場面はまだ登場していない |
 | デコレータ（`@`構文） | Angular等で使われる機能で、本プロジェクトが採用するライブラリ（React・Vite）は使用しない |
 
-これらの機能は、Write系API（POST/PUT/DELETE）の実装が進むにつれて登場する可能性があります（例：エラー応答の種類が増えれば判別可能なユニオンが有用になります）。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
+カード・ボードの新規作成（POST、[15章](#15-fetchでのpostとリクエストボディ)）の実装では、このリストの機能はいずれも必要になりませんでした。残る更新系API（PUT/DELETE）の実装が進むにつれて登場する可能性はまだあります（例：エラー応答の種類が増えれば判別可能なユニオンが有用になります）。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
 
 ## このドキュメントの更新ルール
 

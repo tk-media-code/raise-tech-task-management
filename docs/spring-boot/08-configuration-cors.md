@@ -102,7 +102,7 @@ public CorsConfig(@Value("${app.cors.allowed-origins}") String[] allowedOrigins)
 - **単純リクエスト（simple request）**：`GET`/`HEAD`/`POST`のいずれかで、かつリクエストヘッダーが`Accept`・`Accept-Language`・`Content-Language`・`Content-Type`（一部の値に限る）などの「安全とみなされた種類」に限られる場合。ブラウザは実際のリクエストをそのまま送り、レスポンスの`Access-Control-Allow-Origin`を見てJavaScriptに渡すかどうかを判断します。
 - **プリフライトリクエスト（preflight request）**：それ以外（例：`Content-Type: application/json`を付けた`POST`、独自ヘッダーを付けたリクエストなど）の場合。ブラウザは本番のリクエストを送る前に`OPTIONS`メソッドで「この種類のリクエストを送ってよいか」を問い合わせ、許可が返ってきて初めて本番のリクエストを送ります。
 
-本プロジェクトの現状のAPI（`GET`のみ、カスタムヘッダーなし）は単純リクエストに該当するため、プリフライトは発生しません。将来`POST`で`Content-Type: application/json`を送る書き込みAPIを追加すると、そのときはじめてプリフライトが発生します。
+GET系のAPIは`Content-Type`を送らない単純リクエストに該当するため、プリフライトは発生しません。一方、カード・ボードの新規作成で追加した`POST`は`Content-Type: application/json`を伴うため、これらのエンドポイントを叩くたびに実際にプリフライトが発生するようになりました（[下記](#curlによる動作確認)で確認します）。
 
 **重要な補足**：単純リクエストは「プリフライトが発生しない」だけであり、「CORSの設定が要らない」わけではありません。実際のレスポンスに`Access-Control-Allow-Origin`が無ければ、ブラウザはリクエストを送り届けた後でもレスポンス本文をJavaScriptに渡しません（[下記の挙動](#設定を誤ったときにブラウザで何が起きるか)参照）。
 
@@ -122,7 +122,7 @@ public class CorsConfig implements WebMvcConfigurer {
 	public void addCorsMappings(CorsRegistry registry) {
 		registry.addMapping("/api/**")
 				.allowedOrigins(allowedOrigins)
-				.allowedMethods("GET")
+				.allowedMethods("GET", "POST")
 				.allowCredentials(false);
 	}
 }
@@ -130,7 +130,9 @@ public class CorsConfig implements WebMvcConfigurer {
 
 `addMapping("/api/**")`で「どのURLパターンにこのCORS設定を適用するか」を、`allowedOrigins(...)`で「どのオリジンからのリクエストを許可するか」を指定します。
 
-**`allowedMethods("GET")`に将来のPOST等を先出ししていない理由**：`allowedMethods`はブラウザに対する宣言であり、サーバー側の認可ではありません。先に許可しておいても安全性は変わらず、むしろ「今のAPIには何ができるか」をこの1行が正直に表さなくなります。書き込みAPIを追加したときにブラウザが出すCORSエラーは初回の手動テストで確実に出る「うるさい失敗」なので、対応漏れにすぐ気づけます（[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)の`open-in-view=false`と同じ「静かな見落としより騒がしい失敗を選ぶ」という設計態度です）。
+**`allowedMethods`は今できることの正直な写し**：このAPIが参照専用（GETのみ）だった間、`allowedMethods("GET")`はPOSTを先回りして許可していませんでした。理由は、`allowedMethods`がブラウザに対する宣言でありサーバー側の認可ではない以上、先に許可しておいても安全性は1ミリも上がらず、むしろ「今のAPIには何ができるか」という正直さが失われるためです。カード・ボードの新規作成（[28章](./09-write-api-validation.md#28-登録系apipostの作り方)）でPOSTを実装した今、`allowedMethods("GET", "POST")`へ引き上げました。これは「先回りして許可していた設定を後から使い始めた」のではなく、「実装した機能ぶんだけ許可を広げた」という順序です。まだ実装していないPUT/DELETEは、引き続きここに含めていません。この方針を裏付けたのが、実装直後に実際に体験した次の失敗です。
+
+> 書き込みAPI追加時に出るブラウザのCORSエラーは初回の手動テストで必ず出る「うるさい失敗」で、静かに見逃されることがありません（[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)の`open-in-view=false`と同じ「静かな見落としより騒がしい失敗を選ぶ」という設計態度です）。実際、`CorsConfig`の更新を1テンポ忘れたままフロントエンドから`POST /api/cards`を叩くと、ブラウザの開発者ツールには`Access to fetch at 'http://localhost:8080/api/cards' from origin 'http://localhost:5173' has been blocked by CORS policy`という、原因のはっきりしたエラーが出ます。これは[下記](#設定を誤ったときにブラウザで何が起きるか)で見る`TypeError: Failed to fetch`と対になる、CORS設定漏れ特有の症状です。
 
 **`allowedHeaders`・`maxAge`を書いていない理由**：Spring の`CorsRegistration`は生成時に内部で`applyPermitDefaultValues()`を呼び、`allowedHeaders`を`"*"`、`maxAge`（プリフライト結果のブラウザ側キャッシュ期間）を1800秒に設定済みです。現状のリクエストはカスタムヘッダーを送らないため、明示しても効果は変わりません（実測は[下記](#curlによる動作確認)のとおり）。
 
@@ -204,22 +206,25 @@ curl -i -s -X OPTIONS -H "Origin: http://localhost:5173" \
 ```
 HTTP/1.1 200
 Access-Control-Allow-Origin: http://localhost:5173
-Access-Control-Allow-Methods: GET
+Access-Control-Allow-Methods: GET,POST
 Access-Control-Max-Age: 1800
 ```
-`allowedHeaders`・`maxAge`を明示していなくても、`Access-Control-Max-Age: 1800`が返っています。これが前述の`applyPermitDefaultValues()`の効果です。
+`allowedHeaders`・`maxAge`を明示していなくても、`Access-Control-Max-Age: 1800`が返っています。これが前述の`applyPermitDefaultValues()`の効果です。`Access-Control-Allow-Methods`に`POST`が含まれるようになったのは、[28章](./09-write-api-validation.md#28-登録系apipostの作り方)でカード・ボードの新規作成を実装し、`allowedMethods`へ追加したためです。
 
 ```bash
-# ⑤ 許可していないメソッド（POST）のプリフライト
+# ⑤ カード新規作成POSTの、実際に発生するプリフライト
 curl -i -s -X OPTIONS -H "Origin: http://localhost:5173" \
-  -H "Access-Control-Request-Method: POST" http://localhost:8080/api/boards
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type" http://localhost:8080/api/cards
 ```
 ```
-HTTP/1.1 403
-
-Invalid CORS request
+HTTP/1.1 200
+Access-Control-Allow-Origin: http://localhost:5173
+Access-Control-Allow-Methods: GET,POST
+Access-Control-Allow-Headers: Content-Type
+Access-Control-Max-Age: 1800
 ```
-書き込みAPIを`allowedMethods`に追加し忘れていれば、この検証で気づけます。
+`POST /api/cards`は`Content-Type: application/json`を伴うため単純リクエストに該当せず（[上記](#単純リクエストとプリフライトリクエスト)）、フロントエンドから実際にカードを作成するたびに、ブラウザはこの`OPTIONS`リクエストをまず送ってから本番の`POST`を送っています。もし`allowedMethods`に`POST`を追加し忘れていれば、ここが`403 Invalid CORS request`になり、[28章](./09-write-api-validation.md#28-登録系apipostの作り方)の実装より先にこの検証で気づけます。
 
 ### 設定を誤ったときにブラウザで何が起きるか
 

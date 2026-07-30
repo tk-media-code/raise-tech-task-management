@@ -132,6 +132,22 @@ if (this == o) {
 
 `@ExceptionHandler(ResourceNotFoundException.class)`は、実は2つの省略が重なった書き方です。この要素は本来「複数の例外クラスを配列で受け取れる」ように定義されていますが、渡す値が1つだけの場合は配列の`{ }`を省略して単一の値をそのまま書くことができ、さらに要素名が`value`であるためその名前自体も省略できます。省略しない場合の完全な書き方は`@ExceptionHandler(value = { ResourceNotFoundException.class })`です（ここで登場する「配列」については[30章](#30-配列と可変長引数)で扱います）。
 
+### recordコンポーネントへのアノテーション伝播
+
+カード・ボードの新規作成で登場したリクエストDTOは、record（[docs/java 15章](./03-type-system.md#15-record)）のコンポーネント宣言に直接アノテーションを書いています。
+
+```java
+public record BoardCreateRequest(
+		@NotBlank(message = "ボード名を入力してください") @Size(max = 50, message = "ボード名は50文字以内で入力してください") String name) {
+}
+```
+
+一見すると、このアノテーションは`name`という**フィールド**に付いているだけのように見えます。しかし実際にこのDTOを検証する仕組み（Bean Validation。使い所は[docs/spring-boot 29章](../spring-boot/09-write-api-validation.md#29-リクエストdtoとbean-validation)）は、Jacksonが正準コンストラクタ（recordが自動生成する、全コンポーネントを引数に取るコンストラクタ）を呼び出してインスタンスを組み立てた**直後**に、そのコンストラクタの**引数**に付いたアノテーションを読み取って検証します。`record`は1箇所の宣言（`@NotBlank ... String name`）から、フィールド・正準コンストラクタの引数・`name()`アクセサという複数の要素を自動生成する構文（[15章](./03-type-system.md#15-record)）でしたが、そこに書かれたアノテーションも、それぞれの生成先に**自動的にコピーされて伝播**します。
+
+これは`record`だけの特別な仕組みではなく、Javaのアノテーション自体が「どの要素に付けられるか」を`@Target`という自分自身へのアノテーションで宣言しているという、一般的な仕組みの延長です。Bean Validationが提供する`@NotBlank`・`@Size`のようなアノテーションは、`@Target({ FIELD, METHOD, PARAMETER, CONSTRUCTOR, ... })`のように**複数の適用先**を宣言しています。コンパイラは、recordのコンポーネント宣言に書かれたアノテーションを、そのアノテーションが許可している適用先（フィールド・コンストラクタ引数・アクセサメソッドなど）それぞれへ機械的に複製します。もしアノテーションの`@Target`がフィールドしか許可していなければ、コンストラクタ引数へは伝播せず、Bean Validationはこの値を検証できません（`@NotBlank`・`@Size`はいずれもコンストラクタ引数を含む複数のターゲットを許可しているため、今回は問題なく機能しています）。
+
+`@Column(nullable = false)`（[docs/spring-boot 11章](../spring-boot/03-entity-jpa.md#11-エンティティの基本アノテーション)）のようなJPAのアノテーションが通常の**クラス**（`Card`・`Board`など、record ではない）のフィールドに書かれているのとは対照的に、record を使うDTOでは1つの宣言が複数の場所に同時に効くという点が、書く分量を減らしつつ検証を成立させている仕組みです。
+
 ---
 
 ## 30. 配列と可変長引数

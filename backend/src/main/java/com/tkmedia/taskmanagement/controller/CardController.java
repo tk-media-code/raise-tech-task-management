@@ -1,14 +1,20 @@
 package com.tkmedia.taskmanagement.controller;
 
+import com.tkmedia.taskmanagement.dto.CardCreateRequest;
 import com.tkmedia.taskmanagement.dto.CardResponse;
 import com.tkmedia.taskmanagement.dto.CardSearchCondition;
 import com.tkmedia.taskmanagement.service.CardService;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 
 /**
@@ -60,5 +66,33 @@ public class CardController {
 	@GetMapping("/{id}")
 	public CardResponse get(@PathVariable Integer id) {
 		return cardService.findById(id);
+	}
+
+	/**
+	 * カードを新規作成する。
+	 *
+	 * @param request リクエストボディ（タイトル・説明・期日・ラベルなど）。
+	 *                {@code @Valid}により、CardCreateRequestに付いたBean Validationの
+	 *                アノテーション（{@code @NotNull}など）がこのメソッドの実行前に検証される
+	 *                （違反時はMethodArgumentNotValidExceptionが投げられ、GlobalExceptionHandlerが
+	 *                400へ変換するため、このメソッドの中では検証済みの値として扱ってよい）
+	 * @return 作成したカード（HTTPステータス201、{@code Location}ヘッダーに作成先URLを添えて返す）
+	 */
+	// @RequestBody: HTTPリクエストボディ（JSON）を、Jacksonを介してCardCreateRequestに変換する
+	// アノテーション。GET系メソッドの@RequestParamと異なり、URLではなくボディから値を受け取る。
+	//
+	// 戻り値がCardResponseそのものではなくResponseEntity<CardResponse>なのは、このプロジェクト初の
+	// 「ステータスコードとヘッダーを明示的に指定したいレスポンス」であるため。GET系のメソッドは
+	// 常に200を返せば足りたが、リソースを新規作成するPOSTはRESTの慣習として201 Createdを返し、
+	// 作成されたリソースの場所をLocationヘッダーで示すのが望ましいとされる
+	// （docs/spring-boot/09-write-api-validation.md 28章参照）。
+	@PostMapping
+	public ResponseEntity<CardResponse> create(@Valid @RequestBody CardCreateRequest request) {
+		CardResponse created = cardService.create(request);
+		// ResponseEntity.created(URI) は 201 Created とし、指定したURIをLocationヘッダーに設定する
+		// ビルダーメソッド。URI.create(...)の文字列連結だけでURLを組み立てているのは、
+		// カードIDが数値（パスに直接埋め込んでも安全な文字種）であるため、
+		// URLエンコードを考慮する必要が無いという判断による。
+		return ResponseEntity.created(URI.create("/api/cards/" + created.id())).body(created);
 	}
 }
