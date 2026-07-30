@@ -149,7 +149,7 @@
 
 ## 13. React Routerの基本
 
-`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。
+`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点も扱います。
 
 📄 詳細：[05-router.md](./05-router.md#13-react-routerの基本)
 
@@ -165,7 +165,7 @@
 
 ## 15. コンポーネント設計と状態の持ち方
 
-`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。
+`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。横断ビューで`CardCreateForm`をボードの数だけ並べたとき、stateがインスタンスごとに独立して管理される（＝1つしか開けないという制約を自前で書く必要が無い）ことも扱います。
 
 📄 詳細：[06-component-design.md](./06-component-design.md#15-コンポーネント設計と状態の持ち方)
 
@@ -197,7 +197,7 @@
 
 ## 19. 書き込み（POST）とデータの更新
 
-`useApi`をそのまま使えない書き込み処理のために新設した`useCreate`、書き込み後に一覧を最新化する`refetch`、そして「なぜ楽観的更新にしないのか」（並び順の決定権はサーバーにあるという契約）を解説します。ボード一覧のstateを`App.tsx`へリフトアップした経緯——Contextに飛びつく前にまず検討すべき選択肢としてのリフトアップ——も扱います。
+`useApi`をそのまま使えない書き込み処理のために新設した`useCreate`、書き込み後に一覧を最新化する`refetch`、そして「なぜ楽観的更新にしないのか」（並び順の決定権はサーバーにあるという契約）を解説します。ボード一覧のstateを`App.tsx`へリフトアップした経緯——Contextに飛びつく前にまず検討すべき選択肢としてのリフトアップ——と、そのリフトアップが横断ビューへの`boards`受け渡しにもそのまま活きた経緯も扱います。
 
 📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
 

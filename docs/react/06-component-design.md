@@ -94,6 +94,36 @@ const { data: boards, loading, error, refetch: refetchBoards } = useApi<BoardRes
 
 **Contextには飛びつかなかった**：Reactには、離れたコンポーネント同士でデータを共有する**Context**という仕組みがありますが、今回もまだ採用していません。ボード一覧を必要とするコンポーネントは`BoardSelect`と`BoardManageModal`の2つだけであり、共通の親から2つへpropsで配るだけで、コードの見通しは十分に保てます。Contextを持ち込むと、「この値はどこから来るのか」を`useContext`の呼び出し元だけを見ても追えなくなり（Providerの位置まで遡る必要がある）、消費者が少ない今の規模では見合わないコストです。「独立した取得」が成立しなくなったからといって、次の手が必ずContextとは限りません——**まず親へのリフトアップで足りないか**を検討し、それでも足りなくなったとき（消費者がさらに増える、あるいは画面をまたいで深くネストする、など）に初めてContextを検討する、という順序で判断しています。
 
+### 同じコンポーネントを複数並べたとき：stateはインスタンスごとに独立する
+
+横断ビュー（`pages/CrossBoardView.tsx`）は、`components/CardCreateForm.tsx`をボードの数だけ並べて描画します。
+
+```typescript
+{boardGroups.map((group) => (
+  <div key={group.boardId}>
+    {/* ... */}
+    {status === 'todo' && <CardCreateForm boardId={group.boardId} onCreated={refetch} />}
+  </div>
+))}
+```
+
+`CardCreateForm`の開閉状態は、[08-form-and-mutation.md 18章](./08-form-and-mutation.md#18-フォームの実装)で見たとおり、自分自身が持つただの`useState`です。
+
+```typescript
+const [open, setOpen] = useState(false)
+```
+
+同じコンポーネントを複数箇所に描画しても、`useState`が生成するstateは**呼び出しごと（＝`key`で区別されるJSXツリー上の位置ごと）に別々のインスタンス**として管理されます。そのため「仕事」ボードのフォームを展開しても「家事」ボードのフォームは閉じたままですし、片方のフォームで入力中の`title`がもう片方に影響することもありません。コンポーネントを1つ書けば、それを何回呼び出しても状態の管理まで自動的についてくる、という点がクラスベースの手続き的なUI実装（`prototype/app.js`）との大きな違いです。
+
+対して`prototype/app.js`は、コンポーネントという単位を持たないため、どのボードのクイック追加フォームを開いているかを**アプリ全体でただ1つの変数**で管理していました。
+
+```javascript
+// prototype/app.js
+quickAddBoardId: null, // どのボード(のtodo列)でクイック追加フォームを開いているか
+```
+
+値の置き場所が1つしか無いため、別のボードで「＋ カードを追加」を押すと、`quickAddBoardId`が新しいボードIDで上書きされ、それまで開いていたフォームは強制的に閉じられます（同時に開けるフォームはアプリ全体で1つだけ）。Reactでは`CardCreateForm`を呼び出した回数だけstateの入れ物も自動的に増えるため、「他のインスタンスを閉じてから開く」といった調整をこちらで書く必要はありません。
+
 ### この章のまとめ：判断基準の一覧
 
 | 判断 | 基準 | 例 |
@@ -102,5 +132,6 @@ const { data: boards, loading, error, refetch: refetchBoards } = useApi<BoardRes
 | 関数をコンポーネント化するか | JSXタグとして呼ぶ（マウント・アンマウントの対象にしたい）のでなければ、ただの関数のままにする | `renderContent()` |
 | コンポーネントを共通化するか分けるか | 見た目が似ていても、表示される文脈（前後関係）が異なるなら分ける | `CardItem` / `SearchResultItem` |
 | データをどこで取得するか | 取得するだけの関係が続く間は、必要なコンポーネントがそれぞれ独立して取得する。一方の書き込みを他方が知る必要が生まれたら、共通の親へリフトアップする | `LabelFilterBar`（独立）／ `BoardSelect`・`BoardManageModal`（`App.tsx`へリフトアップ、[19章](./08-form-and-mutation.md#19-書き込みpostとデータの更新)） |
+| 同じコンポーネントを複数配置したときのstate | 呼び出し（描画）ごとに自動的に別インスタンスとして管理されるため、「1つしか開けない」ような制約を自前で書く必要はない | `CardCreateForm`（横断ビューでボードの数だけ並ぶ） |
 
 これらはいずれも「絶対唯一の正解」ではなく、本プロジェクトの現在の規模・要件のもとでの判断です。実装が進み前提が変われば、見直される可能性があります（[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)を参照）。

@@ -74,7 +74,10 @@ function App() {
 
       <main className="p-6">
         <Routes>
-          <Route path="/" element={<CrossBoardView />} />
+          {/* boardsをそのままpropsで渡す（CrossBoardView自身にGET /api/boardsを
+              呼ばせない）。elementに書けるのはただのJSXなので、他のpropsと同じように
+              値を渡せる（docs/react/05-router.md 13章参照）。 */}
+          <Route path="/" element={<CrossBoardView boards={boards} />} />
           <Route path="/boards/:boardId" element={<BoardDetailView />} />
           <Route path="/search" element={<SearchView />} />
         </Routes>

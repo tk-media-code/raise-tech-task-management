@@ -35,6 +35,15 @@
 
 `<Routes>`は、その中の`<Route>`を順番に調べ、現在のURLに一致する**最初の1つだけ**を描画します。`path="/boards/:boardId"`の`:boardId`のように、コロンで始まる部分は**動的セグメント**と呼ばれ、`/boards/1`でも`/boards/42`でも、この`Route`にマッチします。
 
+`element`に渡している`<CrossBoardView />`は、React Router専用の特別な構文ではなく、ただの**JSX**です。そのため他のコンポーネントを描画するときとまったく同じように、propsをそのまま渡せます。
+
+```typescript
+// App.tsx（横断ビューにボード一覧を渡す）
+<Route path="/" element={<CrossBoardView boards={boards} />} />
+```
+
+`<CrossBoardView boards={boards} />`という式が評価された結果（JSX要素）を`element`に渡しているだけなので、`<Route>`自身は「渡された要素をそのまま描画する」以上のことをしていません。`path`と違い`element`は文字列ではなくJSXを受け取る、という点を押さえておくと、`<Route>`に対してどんな値を渡せて何を渡せないのかで迷わずに済みます。
+
 ### `Link`：ページ全体を再読み込みしないリンク
 
 `App.tsx`の検索アイコンは、`<a>`タグではなく`<Link>`コンポーネントです。

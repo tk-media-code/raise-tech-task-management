@@ -206,6 +206,17 @@ return (
 
 **Contextは導入していません**。React にはこうした「離れたコンポーネント間でデータを共有する」ための`Context`という仕組みがありますが、消費者がまだ`BoardSelect`と`BoardManageModal`の2つだけで、共通の親（`App.tsx`）からpropsで配るだけで十分に見通しが良い規模です。Contextを持ち込むと、「この値はどこから来るのか」を`useContext`の呼び出し元だけを見ても追えなくなる（Providerの位置まで遡る必要がある）という間接層が増えるコストの方が、今回は上回ると判断しました。[06-component-design.md 15章](./06-component-design.md#15-コンポーネント設計と状態の持ち方)で述べた「Contextは共有すべき状態がもっと複雑になったときの検討課題」という位置づけは変わっていません——ただし「複数のコンポーネントが同じデータに依存し、かつ一方の変更が他方に影響する」という状況が実際に発生したときにまず検討する選択肢は、（Contextへ飛びつく前に）**リフトアップ**であることが、今回の変更で実例として示されました。
 
+**横断ビューでもこのリフトアップがそのまま活きました**。横断ビュー（`pages/CrossBoardView.tsx`）でボードごとにカード追加フォームを置けるようにしたとき（[06-component-design.md 15章](./06-component-design.md#15-コンポーネント設計と状態の持ち方)参照）、「カードが1枚も無いボード」のセクションも表示するために、ボード一覧（`boards`）がもう1箇所で必要になりました。
+
+```tsx
+// App.tsx
+<Route path="/" element={<CrossBoardView boards={boards} />} />
+```
+
+もし`BoardSelect`のときにリフトアップしていなければ、ここでも`CrossBoardView`が独自に`useApi(apiPaths.boards())`を呼ぶ羽目になり、`App.tsx`と合わせて同じボード一覧を2回取得することになっていたはずです。既に`App.tsx`が`boards`を持っていたおかげで、`<CrossBoardView boards={boards} />`とpropsで渡すだけで済みました。「一度リフトアップした状態は、後から増える消費者にもそのまま配れる」という、リフトアップの効果が波及した例です。
+
+一方で`boardsLoading`・`boardsError`は`CrossBoardView`へ渡していません。ボード一覧の取得に失敗しても、ヘッダーの`BoardSelect`が既にエラー表示を担当しており、横断ビュー側は`lib/grouping.ts`の`groupCardsByStatusAndBoard`が備えているフォールバック（`boards`が`null`なら、取得できているカードの情報だけからボードのセクションを導出する）で動き続けるため、同じエラーをもう一度表示する必要が無いと判断したためです。
+
 ---
 
 ## 20. `useRef`とDOMへの直接アクセス
