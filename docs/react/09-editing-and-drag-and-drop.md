@@ -2,7 +2,7 @@
 
 [← React学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **22〜26章** をまとめています。
+> 元の学習ドキュメントにおける **22〜27章** をまとめています。
 
 ---
 
@@ -10,15 +10,16 @@
 
 `CardDetailModal`は、これまで`<dl>`（定義リスト）で値を表示するだけの閲覧専用コンポーネントでした。要件5.2「カード詳細を開き、説明・期日・ラベルを追加/変更できる」に対応するため、`<form>`を持つ編集可能なコンポーネントに書き換えました。
 
-### 「下書きstate」を持つ項目と持たない項目
+### 5項目すべてを「下書きstate」で持つ
 
-タイトル・説明・期日・ラベルは、`useState`による**下書き**を持ちます。
+タイトル・ステータス・説明・期日・ラベルは、`useState`による**下書き**を持ちます。
 
 ```tsx
 const [title, setTitle] = useState('')
 const [description, setDescription] = useState('')
 const [dueDate, setDueDate] = useState('')
 const [labelIds, setLabelIds] = useState<number[]>([])
+const [status, setStatus] = useState<CardStatus>('todo')
 
 useEffect(() => {
   if (card === null) return
@@ -26,44 +27,60 @@ useEffect(() => {
   setDescription(card.description ?? '')
   setDueDate(card.dueDate ?? '')
   setLabelIds(card.labels.map((label) => label.id))
+  setStatus(card.status)
 }, [card])
 ```
 
-`useState`の初期値は空文字列・空配列にしておき、`card`（`useApi`が取得したカード本体）が届いた**後**に`useEffect`で詰め直しています。[03-state-effect.md 7章](./03-state-effect.md#7-stateとusestate)の「初期値は初回描画にしか使われない」という制約がここでも効いています。モーダルを開いた瞬間はまだ`card === null`（通信中）で、GETが完了して初めて`card`に値が入るという2段階を経るため、`useState(card.title)`のように最初から値を渡す方法は使えません。この依存配列を`cardId`ではなく`card`（オブジェクトそのもの）にしているのも意図的です。「保存」に成功して`refetch()`が完了すると、同じカードに対して**新しいcardオブジェクト**が届きます。`cardId`は変わっていなくても、依存配列を`card`にしておけばこの再取得を検知でき、サーバー側で正規化された値（`title.trim()`済みの表記など）を改めて下書きへ反映できます。
+`useState`の初期値は空文字列・空配列（`status`だけは型を保つため`'todo'`）にしておき、`card`（`useApi`が取得したカード本体）が届いた**後**に`useEffect`で詰め直しています。[03-state-effect.md 7章](./03-state-effect.md#7-stateとusestate)の「初期値は初回描画にしか使われない」という制約がここでも効いています。モーダルを開いた瞬間はまだ`card === null`（通信中）で、GETが完了して初めて`card`に値が入るという2段階を経るため、`useState(card.title)`のように最初から値を渡す方法は使えません。この依存配列を`cardId`ではなく`card`（オブジェクトそのもの）にしているのも意図的です。「保存」に成功して`refetch()`が完了すると、同じカードに対して**新しいcardオブジェクト**が届きます。`cardId`は変わっていなくても、依存配列を`card`にしておけばこの再取得を検知でき、サーバー側で正規化された値（`title.trim()`済みの表記など）を改めて下書きへ反映できます。
 
-一方、ステータスの`<select>`だけは下書きstateを持たず、`card.status`へ**直接**紐づけています。
+以前はステータスの`<select>`だけ下書きを持たず`card.status`へ直接紐づけ、選んだ瞬間にPATCHを即送信する特別扱いでした。しかし1つのフォームの中に「入力してから保存ボタンで確定する項目」と「選んだ瞬間に確定する項目」が混在すると、「保存」ボタンが何を確定させるボタンなのかが曖昧になります（実際、保存ボタンを押していないのにステータスだけ先に変わってしまうという分かりにくさが問題になりました）。そのためステータスも他の4項目と同じ下書きに統一し、「保存」を押すまではローカルな`status` stateを書き換えるだけにしています。
 
-```tsx
-<select value={card.status} onChange={handleStatusChange} disabled={changingStatus}>
-```
-
-タイトル等が「入力してから保存ボタンで確定する」編集なのに対し、ステータス変更は要件5.3の設計上、選んだ瞬間に確定する（PATCHが即座に送られる）操作です。「保存を待つ下書き」という概念がそもそも無いため、下書きstateを用意する理由もありません。`<select>`は変更が成功して`refetch()`が完了するまで`disabled`にしておき、その間に表示している値と実際の値がずれないようにしています。
+要件5.3が求める「選んだ瞬間に即座に切り替わる」ステータス変更は無くなったわけではなく、[23〜27章](#23-dnd-kitの構成要素)で扱うドラッグ＆ドロップと、`CardItem`のスマートフォン限定「移動▾」メニューがそれを担います。どちらもこのモーダルとは別の`useMutation`インスタンス・別のハンドラを持つ独立した呼び出し元で、この統一の影響を受けません。
 
 ### `<select>`の値と`isCardStatus`型ガード
 
 ```tsx
-async function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
+function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
   const nextStatus = event.target.value
   if (!isCardStatus(nextStatus)) return
-  const updated = await changeStatus({ status: nextStatus })
-  if (updated === null) return
-  refetch()
-  onUpdated()
+  setStatus(nextStatus)
 }
 ```
 
-`event.target.value`の型はTypeScript上ただの`string`です。`<option>`は`STATUSES`（`lib/status.ts`）から生成しているため実行時には必ず3値のいずれかですが、TypeScriptはその保証をしてくれません。`lib/grouping.ts`（[docs/react 12章](./04-custom-hooks.md#12-usememoと再計算の抑制)で登場した`groupCardsByStatusAndBoard`）が使っているのと同じ`isCardStatus`型ガードをここでも使い、`string`から`CardStatus`へ絞り込んでいます。
+`event.target.value`の型はTypeScript上ただの`string`です。`<option>`は`STATUSES`（`lib/status.ts`）から生成しているため実行時には必ず3値のいずれかですが、TypeScriptはその保証をしてくれません。`lib/grouping.ts`（[docs/react 12章](./04-custom-hooks.md#12-usememoと再計算の抑制)で登場した`groupCardsByStatusAndBoard`）が使っているのと同じ`isCardStatus`型ガードをここでも使い、`string`から`CardStatus`へ絞り込んでいます。下書きに統一する前は`await changeStatus(...)`を含む非同期関数でしたが、今はローカルstateを書き換えるだけなので同期関数に戻っています。
+
+### 「保存」が送る2本のリクエスト
+
+タイトル等の4項目はバックエンドの`PUT /api/cards/{id}`（`CardUpdateRequest`）1本で更新できますが、このDTOに`status`フィールドはありません（「ボード間移動はスコープ外、ステータス変更は別APIの責務」という設計。[docs/spring-boot 33章](../spring-boot/10-update-api.md#33-更新系apiputpatchの作り方)参照）。そのため「保存」ボタン1回のクリックから、必要に応じて2本のリクエストを順番に送ります。
+
+```tsx
+const updated = await save({ title: titleTrimmed, description, dueDate, labelIds })
+if (updated === null) return
+
+if (status !== card.status) {
+  await changeStatus({ status })
+}
+
+refetch()
+onUpdated()
+```
+
+**`status !== card.status`のガードは最適化ではなく正しさの条件です。** `PATCH /api/cards/{id}/status`は`position`を省略すると、バックエンド（`CardService.updateStatus`、[docs/spring-boot 36章](../spring-boot/10-update-api.md#36-ステータス変更と列内の並び替え)）が「移動先列の末尾に挿入」として扱います。移動先が現在と同じ列であってもこの処理は変わらないため、ガード無しで毎回PATCHを送ると、タイトルだけを直したつもりの保存でカードが自分の列の一番下へ動いてしまいます。ステータスが実際に変わったときだけPATCHを送ることで、この意図しない並び替えを避けています。
+
+**PATCHが失敗しても`refetch()`・`onUpdated()`までは必ず到達させます。** その時点でPUTは既に成功しているため、ここで早期returnすると保存済みのタイトル等が呼び出し元の一覧にもモーダル自身にも反映されないまま残ってしまいます。`refetch()`はサーバーの実際の状態（保存されたタイトル等・変更されなかったステータス）へ`<select>`を含む表示全体を揃え直し、`statusError`がなぜステータスだけ変わらなかったかを示します。2本のリクエストの**間**ではなく最後に1回だけ`refetch()`・`onUpdated()`を呼ぶのもポイントです。途中で呼ぶと`card`オブジェクトが差し替わり、上の`useEffect`が走って送信中の下書きを巻き戻してしまいます。
+
+この設計には小さな既知の限界があります。PATCHが失敗した後、ユーザーがステータスに触れず他の項目だけ直して再保存すると、上のガードによりPATCHは再送されず、`statusError`は次に`changeStatus`が呼ばれるまで表示され続けます（`useMutation`の`error`は次の`mutate`開始時にしかクリアされないため。[08-form-and-mutation.md](./08-form-and-mutation.md)参照）。表示中の`<select>`の値自体は`refetch()`により常に正しいので実害は「古いエラー文が残る」ことだけであり、多くの箇所で使われている共有フック`useMutation`にリセット手段を足してまで解決する問題ではないと判断しています。
 
 ### 更新の反映範囲：このモーダル自身と、呼び出し元の両方
 
-保存・ステータス変更が成功すると、2つの`refetch`系の処理を呼びます。
+保存が成功すると、2つの`refetch`系の処理を呼びます。
 
 ```tsx
 refetch()   // このモーダル自身のuseApi（card本体）を取り直す
 onUpdated() // 呼び出し元（CrossBoardView・BoardDetailView・SearchViewのカード一覧）に再取得を依頼する
 ```
 
-`refetch`だけでは、モーダルの外にある一覧（カードの並びやステータス列）は更新されません。`onUpdated`だけでは、モーダル自身が表示しているステータス（`card.status`に直接紐づく`<select>`の値）が古いままになります。要件5.4「横断ビュー上でカードを編集・ステータス変更すると、元のボード詳細画面にも反映される」は、呼び出し元（`CrossBoardView`・`BoardDetailView`・`SearchView`）がそれぞれ自分の`useApi`の`refetch`を`onUpdated`として渡すことで実現しています。
+`refetch`だけでは、モーダルの外にある一覧（カードの並びやステータス列）は更新されません。`onUpdated`だけでは、モーダル自身の表示（ステータスの下書き、およびフッターのアーカイブボタンの活性条件が参照する`card.status`）が古いままになります。要件5.4「横断ビュー上でカードを編集・ステータス変更すると、元のボード詳細画面にも反映される」は、呼び出し元（`CrossBoardView`・`BoardDetailView`・`SearchView`）がそれぞれ自分の`useApi`の`refetch`を`onUpdated`として渡すことで実現しています。
 
 ---
 

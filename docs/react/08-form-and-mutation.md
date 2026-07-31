@@ -92,7 +92,7 @@ return <form onSubmit={handleSubmit}>{/* ... */}</form>
 
 [04-custom-hooks.md 10章](./04-custom-hooks.md#10-カスタムフック)で見た`useApi`は、「pathの変化を検知して`useEffect`でGETする」という、コンポーネントの**描画に追従する**取得系の設計でした。POSTは性質が逆で、「ボタンを押すという明示的な操作」で一度だけ実行したい書き込みです。依存配列に乗せて自動発火させる`useEffect`とは相性が悪いため、`useApi`をそのまま使わず、新たに`useCreate`を用意しました。
 
-このフックは当初POST専用でしたが、カードの編集（PUT）・ステータス変更（PATCH）が実装された時点で、HTTPメソッドを引数として受け取る`useMutation`へ一般化されました（[docs/react 09-drag-and-drop.md](./09-drag-and-drop.md)参照）。現在の実装は次のとおりです。
+このフックは当初POST専用でしたが、カードの編集（PUT）・ステータス変更（PATCH）が実装された時点で、HTTPメソッドを引数として受け取る`useMutation`へ一般化されました（[docs/react 09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md)参照）。現在の実装は次のとおりです。
 
 ```tsx
 export function useMutation<TRequest, TResponse>(
@@ -270,7 +270,7 @@ return <input ref={titleInputRef} type="text" /* ... */ />
 
 要件定義5.5「ラベル管理」に対応するため、カード新規作成フォームの中に、もう1つの小さな作成フォーム（ラベルの新規作成）を組み込みました。「フォームの中にフォームがある」入れ子の構造は本プロジェクト初めてで、これまでの章の考え方をいくつか組み合わせて実現しています。
 
-> 📄 この節のコードは当初`components/CardCreateForm.tsx`に直接書かれていましたが、カード編集（`CardDetailModal`）でも同じラベル選択・作成UIが必要になったため、`components/LabelPicker.tsx`という独立したコンポーネントへ切り出しました（[09-drag-and-drop.md](./09-drag-and-drop.md)参照）。以下のコード例・説明は「入れ子フォームであることに起因する問題」という当時からの本質は変わっていないため、ファイルの引っ越し以外はそのまま通用します。呼び出し元がカード作成フォームか、カード編集モーダルかによらず、`LabelPicker`は「選択中のラベルID一覧」と「変わったときに呼ぶ関数」だけをpropsで受け取るcontrolledなコンポーネントです。
+> 📄 この節のコードは当初`components/CardCreateForm.tsx`に直接書かれていましたが、カード編集（`CardDetailModal`）でも同じラベル選択・作成UIが必要になったため、`components/LabelPicker.tsx`という独立したコンポーネントへ切り出しました（[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md)参照）。以下のコード例・説明は「入れ子フォームであることに起因する問題」という当時からの本質は変わっていないため、ファイルの引っ越し以外はそのまま通用します。呼び出し元がカード作成フォームか、カード編集モーダルかによらず、`LabelPicker`は「選択中のラベルID一覧」と「変わったときに呼ぶ関数」だけをpropsで受け取るcontrolledなコンポーネントです。
 
 ### `<form>`は入れ子にできない
 

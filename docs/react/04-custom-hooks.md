@@ -21,7 +21,7 @@
 | `useMutation<TRequest, TResponse>` | 1つのAPIパスへPOST/PUT/PATCHし、送信状態を返す | `useState`・`useCallback` |
 | `useCardDragAndDrop` | カードのドラッグ＆ドロップに関する状態・センサー・イベントハンドラをまとめる | `useState`・`useEffect` |
 
-`useMutation`は書き込み（POST/PUT/PATCH）専用のフックで、`useApi`とは対照的にstateの変化を検知して自動発火する`useEffect`を持ちません。「ボタンを押す・カードをドロップするという明示的な操作」で一度だけ実行する処理という性質の違いによるものです。詳しくは[08-form-and-mutation.md 19章](./08-form-and-mutation.md#19-書き込みpostとデータの更新)を参照してください。`useCardDragAndDrop`は要件5.3のドラッグ＆ドロップ専用で、[09-drag-and-drop.md](./09-drag-and-drop.md)で扱います。
+`useMutation`は書き込み（POST/PUT/PATCH）専用のフックで、`useApi`とは対照的にstateの変化を検知して自動発火する`useEffect`を持ちません。「ボタンを押す・カードをドロップするという明示的な操作」で一度だけ実行する処理という性質の違いによるものです。詳しくは[08-form-and-mutation.md 19章](./08-form-and-mutation.md#19-書き込みpostとデータの更新)を参照してください。`useCardDragAndDrop`は要件5.3のドラッグ＆ドロップ専用で、[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md)で扱います。
 
 `hooks/useApi.ts`のコメントが、カスタムフックの意義を端的に説明しています。
 
