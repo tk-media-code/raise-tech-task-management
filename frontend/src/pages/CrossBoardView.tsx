@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { closestCenter, DndContext, DragOverlay } from '@dnd-kit/core'
+import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
@@ -8,7 +8,7 @@ import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
-import { columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
+import { cardCollisionDetection, columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
 import { groupCardsByStatusAndBoard } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
 import type { BoardResponse, CardResponse } from '../types/api'
@@ -91,9 +91,11 @@ function CrossBoardView({ boards }: Props) {
     return (
       <DndContext
         sensors={dragAndDrop.sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={cardCollisionDetection}
         onDragStart={dragAndDrop.handleDragStart}
+        onDragMove={dragAndDrop.handleDragMove}
         onDragEnd={dragAndDrop.handleDragEnd}
+        onDragCancel={dragAndDrop.handleDragCancel}
       >
         <div className="grid gap-4 md:grid-cols-3">
           {STATUSES.map((status) => {
@@ -128,6 +130,7 @@ function CrossBoardView({ boards }: Props) {
                         cards={group.cards}
                         onSelect={(cardId) => setSelectedCardId(cardId)}
                         onMoved={refetch}
+                        dropIndicator={dragAndDrop.dropIndicator}
                       />
                       {/* 「＋ カードを追加」はボードごとに1つ、未着手セクションの下にのみ置く
                           （pages/BoardDetailView.tsxと同じくワイヤーフレーム6.2①の配置ルール。
