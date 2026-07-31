@@ -1,5 +1,6 @@
 package com.tkmedia.taskmanagement.controller;
 
+import com.tkmedia.taskmanagement.dto.CardArchiveUpdateRequest;
 import com.tkmedia.taskmanagement.dto.CardCreateRequest;
 import com.tkmedia.taskmanagement.dto.CardResponse;
 import com.tkmedia.taskmanagement.dto.CardSearchCondition;
@@ -133,5 +134,18 @@ public class CardController {
 	@PatchMapping("/{id}/status")
 	public CardResponse updateStatus(@PathVariable Integer id, @Valid @RequestBody CardStatusUpdateRequest request) {
 		return cardService.updateStatus(id, request);
+	}
+
+	/**
+	 * カードのアーカイブ状態を変更する（アーカイブする／復元する、両方をこのAPIで扱う）。
+	 *
+	 * @param id      対象カードのID
+	 * @param request 変更後のアーカイブ状態
+	 * @return 更新後のカード
+	 */
+	// updateStatusと同じ理由でPUTではなくPATCHを使う（isArchived以外の属性を送らない部分更新のため）。
+	@PatchMapping("/{id}/archive")
+	public CardResponse updateArchived(@PathVariable Integer id, @Valid @RequestBody CardArchiveUpdateRequest request) {
+		return cardService.updateArchived(id, request);
 	}
 }

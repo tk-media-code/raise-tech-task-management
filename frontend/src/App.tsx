@@ -4,6 +4,7 @@ import { apiPaths } from './api/client'
 import BoardManageModal from './components/BoardManageModal'
 import BoardSelect from './components/BoardSelect'
 import { useApi } from './hooks/useApi'
+import ArchiveView from './pages/ArchiveView'
 import CrossBoardView from './pages/CrossBoardView'
 import BoardDetailView from './pages/BoardDetailView'
 import SearchView from './pages/SearchView'
@@ -24,7 +25,6 @@ import type { BoardResponse } from './types/api'
  * 状態をここへ引き上げた（詳しい経緯はcomponents/BoardSelect.tsxのdocblock参照）。
  *
  * ルート構成は要件定義（docs/requirements/03-screens.md 6章）の画面遷移に対応する。
- * アーカイブ画面は、書き込みAPI（PUT/DELETE）の実装後に追加する。
  */
 function App() {
   const { data: boards, loading: boardsLoading, error: boardsError, refetch: refetchBoards } =
@@ -69,6 +69,17 @@ function App() {
           >
             🔍
           </Link>
+          {/* 📥 アーカイブ（要件5.7）。ワイヤーフレーム6.2では①ボード詳細・③横断ビューの
+              両方から開ける導線として描かれているが、🔍検索と同じ理由でヘッダー
+              （<Routes>の外側）に1つ置けば両画面から開けるため、個別に配置し直さない。 */}
+          <Link
+            to="/archive"
+            title="アーカイブ"
+            aria-label="アーカイブ"
+            className="rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
+          >
+            📥
+          </Link>
         </div>
       </header>
 
@@ -80,6 +91,7 @@ function App() {
           <Route path="/" element={<CrossBoardView boards={boards} />} />
           <Route path="/boards/:boardId" element={<BoardDetailView />} />
           <Route path="/search" element={<SearchView />} />
+          <Route path="/archive" element={<ArchiveView />} />
         </Routes>
       </main>
 

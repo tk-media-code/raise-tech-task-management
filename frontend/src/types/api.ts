@@ -152,3 +152,14 @@ export type CardStatusUpdateRequest = {
   /** 移動先ステータス列内での挿入位置（0始まり）。省略時（undefined）は列の末尾に挿入される */
   position?: number
 }
+
+/**
+ * カードのアーカイブ状態変更API（{@code PATCH /api/cards/{id}/archive}）のリクエストボディ。
+ * バックエンド: backend/.../dto/CardArchiveUpdateRequest.java
+ *
+ * カード詳細モーダルの「アーカイブ」ボタン（archived: true）・アーカイブ画面の「復元」ボタン
+ * （archived: false）の両方が、この同じ型でリクエストを送る（要件定義5.7）。
+ */
+export type CardArchiveUpdateRequest = {
+  archived: boolean
+}

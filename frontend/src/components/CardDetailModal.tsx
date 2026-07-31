@@ -4,7 +4,7 @@ import { apiPaths } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { useMutation } from '../hooks/useMutation'
 import { isCardStatus, STATUSES, STATUS_LABELS } from '../lib/status'
-import type { CardResponse, CardStatusUpdateRequest, CardUpdateRequest } from '../types/api'
+import type { CardArchiveUpdateRequest, CardResponse, CardStatusUpdateRequest, CardUpdateRequest } from '../types/api'
 import DueDateBadge from './DueDateBadge'
 import LabelPicker from './LabelPicker'
 import StatusMessage from './StatusMessage'
@@ -21,8 +21,8 @@ type Props = {
 /**
  * カード詳細モーダル（要件定義 6.2 ④）。
  * タイトル・ステータス・説明・期日・ラベルを編集し、要件5.2「カード詳細を開き、説明・期日・
- * ラベルを追加/変更できる」に対応する。アーカイブ・削除はまだ書き込みAPI（DELETE等）が
- * 未実装のため、引き続きボタン自体を置いていない。
+ * ラベルを追加/変更できる」に対応する。フッターの「アーカイブ」／「復元」ボタンは要件5.7に対応する
+ * （削除はまだ書き込みAPI（DELETE等）が未実装のため、引き続きボタン自体を置いていない）。
  *
  * タイトル・説明・期日・ラベルは「保存」ボタンを押すまでサーバーへ送らない
  * （CardCreateFormと同じ、ドラフトを溜めてから確定するフォーム）。一方ステータスだけは
@@ -94,6 +94,18 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     cardId === null ? '' : apiPaths.updateCardStatus(cardId),
   )
 
+  // アーカイブ状態の変更（PATCH）。「アーカイブする」「復元する」のどちらもこの1つのmutateで
+  // 扱う（types/api.ts CardArchiveUpdateRequestの分岐と同じ）。ボタン側は現在のcard.isArchivedを
+  // 見て、送る値（true/false）とラベルの両方をその場で決める。
+  const {
+    mutate: changeArchived,
+    submitting: archiving,
+    error: archiveError,
+  } = useMutation<CardArchiveUpdateRequest, CardResponse>(
+    'PATCH',
+    cardId === null ? '' : apiPaths.updateCardArchive(cardId),
+  )
+
   useEffect(() => {
     if (cardId === null) return
 
@@ -158,6 +170,19 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
 
     refetch()
     onUpdated()
+  }
+
+  async function handleArchiveToggle() {
+    if (card === null) return
+
+    const updated = await changeArchived({ archived: !card.isArchived })
+    if (updated === null) return
+
+    // アーカイブ・復元のどちらでも、このカードは今開いている一覧（ボード表示・横断ビュー・
+    // アーカイブ一覧のいずれか）から消える。そのためrefetch()でこのモーダル自身を
+    // 最新化する意味が無く（消えた側の一覧にはもう出てこない）、他の操作と違ってonClose()まで行う。
+    onUpdated()
+    onClose()
   }
 
   return (
@@ -301,9 +326,23 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
           )}
         </div>
 
-        <footer className="border-t border-slate-200 p-4 text-xs text-slate-400">
-          ※ アーカイブ・削除は書き込みAPIの実装後に対応します。
-        </footer>
+        {/* cardがnullの間（読み込み中）はisArchivedを参照できずボタンのラベルを決められないため、
+            フォーム本体と同じくcard !== nullの間だけ描画する。 */}
+        {card !== null && (
+          <footer className="flex items-center justify-between gap-3 border-t border-slate-200 p-4">
+            <button
+              type="button"
+              onClick={handleArchiveToggle}
+              disabled={archiving}
+              className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {archiving ? '処理中…' : card.isArchived ? '復元' : 'アーカイブ'}
+            </button>
+            {archiveError !== null && (
+              <StatusMessage kind="error">{archiveError.message}</StatusMessage>
+            )}
+          </footer>
+        )}
       </div>
     </div>
   )
