@@ -99,6 +99,12 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
     throw new ApiError(message, response.status, problem)
   }
 
+  // 204 No Content（ボード削除成功時のレスポンス）は本文自体が存在せず、response.json()を
+  // 呼ぶと「JSONとして空文字列をパースしようとして失敗する」例外になる。本文が無いことが
+  // 分かっている場合はここで打ち切り、`as T`のTにvoidを指定した呼び出し元（deleteRequest）が
+  // undefinedをそのまま受け取れるようにする。
+  if (response.status === 204) return undefined as T
+
   // `as T` は「このJSONはT型だと信じる」という宣言にすぎず、実行時の検証は一切されない。
   // 型定義（types/api.ts）とバックエンドのDTOがずれていても、TypeScriptは気づけない。
   // 外部から来るデータに対する型は「保証」ではなく「約束」だという点は覚えておくこと。
@@ -189,6 +195,22 @@ export async function patchJson<TRequest, TResponse>(path: string, body: TReques
 }
 
 /**
+ * APIをDELETEで叩く（リソースの削除用）。
+ * ボード削除（{@code DELETE /api/boards/{id}}）で使う。
+ *
+ * {@link sendJson}に相乗りさせず独立した関数にしているのは、DELETEがリクエストボディを
+ * 持たず、成功時のレスポンス（204 No Content）にも本文が無いため。sendJsonの型引数
+ * `<TRequest, TResponse>`はどちらも「送る／受け取るJSONがある」ことを前提にしており、
+ * この関数はそのどちらも持たない（戻り値はvoidで、成功したかどうかは例外が飛ばなかったことで判断する）。
+ *
+ * @param path APIのパス（例: "/api/boards/1"）
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+export async function deleteRequest(path: string): Promise<void> {
+  await request<void>(path, { method: 'DELETE' })
+}
+
+/**
  * APIのパスを組み立てる関数群。
  * URLの文字列をコンポーネントに散らばらせず、ここ1箇所に集約する。
  * バックエンドのエンドポイントが変わったとき、直す場所がこのオブジェクトだけで済む。
@@ -260,4 +282,11 @@ export const apiPaths = {
 
   /** ボード新規作成（POST）先のパス */
   createBoard: () => '/api/boards',
+
+  /**
+   * ボードの並べ替え（PATCH）先のパス。
+   * ボード名の変更（PUT）・削除（DELETE）は、GET1件取得と同じ `board(boardId)` をそのまま使う
+   * （apiPaths.cardがGET/PUTを兼ねているのと同じく、URLの文字列自体はメソッドによらず同じため）。
+   */
+  updateBoardPosition: (boardId: number | string) => `/api/boards/${boardId}/position`,
 }

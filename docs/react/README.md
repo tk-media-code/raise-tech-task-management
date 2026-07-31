@@ -25,7 +25,8 @@
 | 15章 | コンポーネント設計と状態の持ち方 | [06-component-design.md](./06-component-design.md) |
 | 16〜17章 | npm・Viteとビルド周りの設定 | [07-build-tooling.md](./07-build-tooling.md) |
 | 18〜21章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
-| 22〜27章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
+| 22〜28章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
+| 29〜30章 | ボード管理（改名・削除） | [10-board-management.md](./10-board-management.md) |
 
 ## 目次
 
@@ -56,6 +57,9 @@
 25. [ドラッグ＆ドロップだけの楽観的更新](./09-editing-and-drag-and-drop.md#25-ドラッグドロップだけの楽観的更新)
 26. [`DragOverlay`と見た目のコピー](./09-editing-and-drag-and-drop.md#26-dragoverlayと見た目のコピー)
 27. [挿入位置の可視化](./09-editing-and-drag-and-drop.md#27-挿入位置の可視化)
+28. [単一リストのドラッグ＆ドロップとドラッグハンドル](./09-editing-and-drag-and-drop.md#28-単一リストのドラッグドロップとドラッグハンドル)
+29. [インライン改名編集とEscapeの競合](./10-board-management.md#29-インライン改名編集とescapeの競合)
+30. [削除と`key`による再マウント](./10-board-management.md#30-削除とkeyによる再マウント)
 
 ---
 
@@ -272,6 +276,30 @@
 ドラッグ中に挿入位置をラインで示すための`collisionDetection`のカスタマイズ（`pointerWithin`優先＋`closestCenter`フォールバック）、`onDragMove`と`onDragOver`の使い分け、`onDragCancel`、挿入位置の判定を1つの純粋関数にまとめてプレビューと確定処理を一致させる設計を解説します。
 
 📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#27-挿入位置の可視化)
+
+---
+
+## 28. 単一リストのドラッグ＆ドロップとドラッグハンドル
+
+ボードの並べ替え用フック（`useBoardDragAndDrop`）を、カード版（`useCardDragAndDrop`）と比較しながら解説します。列が1本しか無いことで自前の衝突判定・列識別子の組み立てが不要になる一方、`▲▼`・`改名`・`削除`ボタンと同居するため`setActivatorNodeRef`で`⠿`だけをドラッグ起点にする必要がある、という差分を扱います。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#28-単一リストのドラッグドロップとドラッグハンドル)
+
+---
+
+## 29. インライン改名編集とEscapeの競合
+
+ボード管理モーダルの各行をその場で入力欄に切り替えるインライン編集を解説します。「編集中かどうか」を行自身ではなく親コンポーネントに持たせる理由、Reactの合成イベントとネイティブのイベント伝播の違いから生じるEscapeキーの競合とその解決方法を扱います。
+
+📄 詳細：[10-board-management.md](./10-board-management.md#29-インライン改名編集とescapeの競合)
+
+---
+
+## 30. 削除と`key`による再マウント
+
+ボード削除を教材に、`window.confirm()`による確認、`useMutation`とは別の`useDelete`フックを設けた理由、204 No Contentの受け取り方を解説します。削除の影響が「そのボードの詳細画面を見ていたかもしれない」「他のページが持つカード一覧を最新化する必要がある」という2点に及ぶことと、後者を`<Routes key={dataVersion}>`という`key`によるページ全体の再マウントで解決する設計を扱います。
+
+📄 詳細：[10-board-management.md](./10-board-management.md#30-削除とkeyによる再マウント)
 
 ---
 

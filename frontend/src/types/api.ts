@@ -115,6 +115,28 @@ export type BoardCreateRequest = {
 }
 
 /**
+ * ボード名変更API（{@code PUT /api/boards/{id}}）のリクエストボディ。
+ * バックエンド: backend/.../dto/BoardUpdateRequest.java
+ */
+export type BoardUpdateRequest = {
+  name: string
+}
+
+/**
+ * ボードの並べ替えAPI（{@code PATCH /api/boards/{id}/position}）のリクエストボディ。
+ * バックエンド: backend/.../dto/BoardPositionUpdateRequest.java
+ *
+ * ボード管理モーダルでの `⠿` ドラッグ・`▲`/`▼` ボタン、どちらの操作もこの型でリクエストを送る。
+ * CardStatusUpdateRequest.positionと違い、こちらは省略できない（必須）。ボードの並べ替えには
+ * 「位置を指定せずとりあえず末尾へ動かす」という呼び出し元が無く、常に明確な移動先を
+ * 指定できる操作（ドラッグの着地点・▲▼が指す隣の位置）からしか呼ばれないため。
+ */
+export type BoardPositionUpdateRequest = {
+  /** 並べ替え後の一覧内での挿入位置（0始まり） */
+  position: number
+}
+
+/**
  * ラベル新規作成API（{@code POST /api/boards/{id}/labels}}）のリクエストボディ。
  * バックエンド: backend/.../dto/LabelCreateRequest.java
  *

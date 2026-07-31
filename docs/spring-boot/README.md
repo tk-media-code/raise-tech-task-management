@@ -26,7 +26,8 @@
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
 | 28〜32章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
-| 33〜38章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
+| 33〜39章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
+| 40〜41章 | 削除API（DELETE）とDBレベルのカスケード削除 | [11-delete-api.md](./11-delete-api.md) |
 
 ## 目次
 
@@ -68,6 +69,9 @@
 36. [ステータス変更と列内の並び替え](./10-update-api.md#36-ステータス変更と列内の並び替え)
 37. [CORSへの追記](./10-update-api.md#37-corsへの追記)
 38. [アーカイブ：フラグ更新と冪等性](./10-update-api.md#38-アーカイブフラグ更新と冪等性)
+39. [ボードの改名と並べ替え](./10-update-api.md#39-ボードの改名と並べ替え)
+40. [削除API（DELETE）と204 No Content](./11-delete-api.md#40-削除apideleteと204-no-content)
+41. [物理削除とDBレベルのON DELETE CASCADE](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
 
 ---
 
@@ -372,6 +376,30 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 要件定義5.7のアーカイブ機能を、`status`の4値目としてではなく独立した`isArchived`フラグで表現する設計理由、「完了」列のカードのみアーカイブ可能というBean Validationでは表現できない制約をService層で検証する方法、`PATCH /api/cards/{id}/archive`が「同じ状態への変更が重複しても200を返す」という冪等性を持つ理由、復元時にpositionを採番し直す理由を解説します。
 
 📄 詳細：[10-update-api.md](./10-update-api.md#38-アーカイブフラグ更新と冪等性)
+
+---
+
+## 39. ボードの改名と並べ替え
+
+ボード管理モーダルの改名（`PUT /api/boards/{id}`）・並べ替え（`PATCH /api/boards/{id}/position`）を教材に、既存の更新系APIパターン（34章のダーティチェック、36章の「取り出す→挿し込む→振り直す」）をボードにそのまま再利用した実装を解説します。カードには無い「区分（ステータス・アーカイブ）」が無いことによる簡略化、`position`をあえて必須にした理由も扱います。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#39-ボードの改名と並べ替え)
+
+---
+
+## 40. 削除API（DELETE）と204 No Content
+
+本プロジェクト初の`@DeleteMapping`を、ボード削除APIを教材に解説します。戻り値を`void`にし`@ResponseStatus(HttpStatus.NO_CONTENT)`で204を返す理由、`deleteById`が存在しないIDに対して黙って何もしないため`existsById`による事前確認が必要になる理由を扱います。
+
+📄 詳細：[11-delete-api.md](./11-delete-api.md#40-削除apideleteと204-no-content)
+
+---
+
+## 41. 物理削除とDBレベルのON DELETE CASCADE
+
+ボード削除時にカード・ラベルも連鎖的に削除される仕組みを解説します。`Board`エンティティに`@OneToMany`を持たせずDBの外部キー制約（`ON DELETE CASCADE`）に連鎖削除を任せている設計判断、JPAの`cascade`属性とDBレベルの`ON DELETE CASCADE`という2つの「カスケード」の違いを扱います。
+
+📄 詳細：[11-delete-api.md](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
 
 ---
 

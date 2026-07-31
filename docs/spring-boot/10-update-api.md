@@ -2,7 +2,7 @@
 
 [← 学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **33〜37章** をまとめています。
+> 元の学習ドキュメントにおける **33〜39章** をまとめています。
 
 ---
 
@@ -245,6 +245,86 @@ if (card.getIsArchived().equals(archived)) {
 一方、復元する側（`false`に戻す側）は`position`を`findMaxPosition(boardId, status) + 1`で**採番し直します**。アーカイブされている間に元の列が並べ替えられていると、保持していたposition値が既に他のカードに使われてしまっている可能性があるためです（保持したままにすると、同じ列に同じposition値を持つカードが2枚できてしまいます）。[31章](./09-write-api-validation.md#31-登録処理の中身)で見た`create`の採番と同じ式を使っているのはこのためで、`findMaxPosition`がアーカイブ済みカードも母集団に含めている（[36章](#36-ステータス変更と列内の並び替え)末尾の対比を参照）ことも、この計算が正しく機能する前提になっています。結果として、復元されたカードは元にいた場所ではなく、常にその列の**末尾**に置かれます。要件5.7が求めているのは「元のステータス列に戻ること」であり、列内の元の位置までの厳密な復元は求めていないため、これで受け入れ条件を満たします。
 
 📄 実装：`backend/.../controller/CardController.java`の`updateArchived`、`backend/.../service/CardService.java`の`updateArchived`
+
+---
+
+## 39. ボードの改名と並べ替え
+
+ボード管理モーダル（要件定義5.1・6.2②）の改名・並べ替えも、ここまでの章で学んだ「更新系API」のパターンをそのまま適用したものです。新しい仕組みは登場せず、既存の考え方をどう再利用したかを整理します。
+
+```java
+@PutMapping("/{id}")
+public BoardResponse update(@PathVariable Integer id, @Valid @RequestBody BoardUpdateRequest request) {
+	return boardService.update(id, request);
+}
+
+@PatchMapping("/{id}/position")
+public BoardResponse updatePosition(
+		@PathVariable Integer id, @Valid @RequestBody BoardPositionUpdateRequest request) {
+	return boardService.updatePosition(id, request);
+}
+```
+
+### 改名：34章のダーティチェックをそのまま使う
+
+`BoardService.update`は、`CardService.update`（[34章](#34-ダーティチェックによる更新)）と全く同じ形です。
+
+```java
+@Transactional
+public BoardResponse update(Integer id, BoardUpdateRequest request) {
+	Board board = boardRepository.findById(id)
+			.orElseThrow(() -> new ResourceNotFoundException("ボードが見つかりません（id=" + id + "）"));
+	board.setName(request.name().trim());
+	return toResponse(board);
+}
+```
+
+`findById`で取得した`board`は既に永続化コンテキストに乗っているため、`setName`で値を書き換えるだけでよく、`save()`の明示呼び出しは不要です。カードの`update`が「タイトル・説明・期日・ラベル」という複数の属性を一度に扱っていたのに対し、こちらは`name`1つだけなので、本体はさらに単純になっています。
+
+### 並べ替え：36章との違いは「区分が無いこと」
+
+`BoardService.updatePosition`は、`CardService.updateStatus`（[36章](#36-ステータス変更と列内の並び替え)）の「対象を取り除く→挿し込む→列全体を1から振り直す」という手順をそのまま踏襲しています。
+
+```java
+List<Board> ordered = new ArrayList<>(boardRepository.findAllByOrderByPositionAscIdAsc());
+ordered.removeIf(b -> b.getId().equals(board.getId()));
+
+int insertIndex = Math.min(request.position(), ordered.size());
+ordered.add(insertIndex, board);
+
+for (int i = 0; i < ordered.size(); i++) {
+	ordered.get(i).setPosition(i + 1);
+}
+```
+
+大きな違いは、カードにあった「ステータス」「アーカイブ済みかどうか」という**区分**が、ボードには存在しないことです。カードの`updateStatus`は「移動先の列（ボード×ステータス）」という部分集合を対象に振り直しましたが、ボードは常に「全ボード」という1つのリストだけを相手にします。[36章](#36-ステータス変更と列内の並び替え)の`CardRepository`が「採番用（アーカイブ済みも含む全件、`findMaxPosition`）」と「挿入位置算出用（非アーカイブのみ、`findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc`）」という2つの母集団を使い分けていたのに対し、`BoardRepository.findAllByOrderByPositionAscIdAsc()`はその両方を1つのメソッドで兼ねます。区分という次元が無くなったことで、コード自体も素直になっています。
+
+### `findAllByOrderByPositionAscIdAsc()`の戻り値をなぜコピーするのか
+
+```java
+List<Board> ordered = new ArrayList<>(boardRepository.findAllByOrderByPositionAscIdAsc());
+```
+
+Spring Data JPAのクエリメソッドが返す`List`の実装は、必ずしも`ArrayList`のような可変（`removeIf`・`add`が使える）なリストとは限りません。`new ArrayList<>(...)`でコピーを作ってから操作することで、この実装詳細に依存しない安全なコードになります。
+
+### 必須にした`position`——`CardStatusUpdateRequest`との非対称
+
+```java
+public record BoardPositionUpdateRequest(
+		@NotNull(message = "位置を指定してください")
+		@PositiveOrZero(message = "位置は0以上で指定してください") Integer position) {
+}
+```
+
+`CardStatusUpdateRequest.position`（[36章](#36-ステータス変更と列内の並び替え)）は`@PositiveOrZero`だけで`@NotNull`を付けず、未指定（`null`）を「列の末尾へ挿入」という意味として受け付けていました。カード詳細モーダルのステータス選択のように「位置までは意識していないが、とにかく移動させたい」という呼び出し元が存在したためです。
+
+ボードの並べ替えには、そのような呼び出し元がありません。`⠿`のドラッグも`▲`/`▼`ボタンも、必ず「どこに挿入するか」が明確に決まった状態でリクエストを送ります。「省略時は末尾へ」という緩さを持たせる理由が無いため、`BoardPositionUpdateRequest.position`は`@NotNull`で必須にしています。同じ「並べ替えの挿入位置」という役割のフィールドでも、呼び出し元の事情によって必須/任意が変わりうる、という一例です。
+
+### 振り直し後に欠番が残らない
+
+[36章](#36-ステータス変更と列内の並び替え)の`updateStatus`は、移動元の列を詰め直さないため`1, 2, 4`のような欠番が残ることがありました。`updatePosition`にはそもそも「移動元列」という概念が無く、対象は常に全ボードの1リストだけです。そのリスト全体を毎回1から振り直すため、ボードの並べ替えでは欠番が生じません。
+
+📄 実装：`backend/.../controller/BoardController.java`の`update`・`updatePosition`、`backend/.../service/BoardService.java`の`update`・`updatePosition`
 
 ---
 

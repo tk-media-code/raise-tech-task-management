@@ -62,14 +62,14 @@ public class CorsConfig implements WebMvcConfigurer {
 				// （docs/spring-boot/09-write-api-validation.md 28章参照）。
 				// カードの編集（PUT）・ステータス変更（PATCH）を実装したため、この2つも追加した
 				// （docs/spring-boot/10-update-api.md参照）。
+				// ボードの削除（DELETE /api/boards/{id}）を実装したため、DELETEも追加した
+				// （docs/spring-boot/11-delete-api.md参照）。
 				// 以前このメソッドが"GET"のみだった頃に残していた「先回りで許可しない理由」
 				// （(1) allowedMethodsはブラウザ向けの宣言であって認可の仕組みではない、
 				// 　(2) この1行を「今このAPIに何ができるか」の正直な写しにしたい、
 				// 　(3) 未許可のまま書き込みAPIを追加すると、ブラウザのCORSエラーという
 				// 　　　「うるさい失敗」で気づける）という考え方自体は変わっていない。
-				// DELETE（削除）はまだ実装していないため、まだここには加えない。
-				// 実装した時点で、この行にも追加すること。
-				.allowedMethods("GET", "POST", "PUT", "PATCH")
+				.allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
 				// Cookieや Authorization ヘッダーは送らないので false（Springの既定と同じだが、
 				// 「意図的に送らない」ことを明示する）。なお allowCredentials(true) と
 				// allowedOrigins("*") の併用はCORS仕様で禁止されており、Springは起動時に例外を投げる。
