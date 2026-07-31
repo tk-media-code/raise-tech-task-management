@@ -199,6 +199,25 @@ public CardResponse updateArchived(@PathVariable Integer id, @Valid @RequestBody
 
 `status`に`"archived"`を追加する設計も一見成立しそうですが、そうすると「アーカイブされている間、元々どの列にいたか」という情報が失われます。要件5.7は「アーカイブ一覧から、カードを**元のステータスへ**『復元』できる」と定めており、元の列を覚えておく必要があります。`isArchived`を`status`とは別の軸にしておけば、アーカイブ中も`status`列の値（`todo`/`doing`/`done`）をそのまま保持でき、復元時は`isArchived`をfalseに戻すだけで元の列に戻せます。[36章](#36-ステータス変更と列内の並び替え)で見た`ALLOWED_STATUSES`やDBの`@Check`制約（3値固定）に一切手を入れずに済むのも、この設計を選んだ利点です。
 
+### アーカイブ可能な条件を検証する
+
+要件定義5.7は「完了したカードを削除せずに退避する」機能として、アーカイブできる対象を「完了」列のカードだけに限定しています。この制約は`CardArchiveUpdateRequest`のBean Validationでは表現できません（`archived`は単なる`Boolean`であり、対象カードの`status`と組み合わせて判断する必要があるため）。[32章](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)のラベル色チェックと同じく、Service層で明示的に検証します。
+
+```java
+if (archived) {
+	if (!"done".equals(card.getStatus())) {
+		throw new InvalidRequestException("完了ステータスのカードのみアーカイブできます");
+	}
+	card.setIsArchived(true);
+} else {
+	// ...復元処理...
+}
+```
+
+この`if`が`archived`（＝アーカイブする方向）のときにしか出てこないのは、復元（`archived == false`）には対応する制約が無いためです。アーカイブ処理が`status`を一切変更しない（前節参照）ことにより、アーカイブされているカードの`status`は必ず`"done"`のまま保たれます。したがって「アーカイブされているカードを復元してよいか」を判定するための追加チェックはそもそも不要で、復元は常に許可されます。
+
+フロントエンド（`components/CardDetailModal.tsx`）側でも同じ条件でボタンを`disabled`にしていますが、これはサーバーへの無駄なリクエストを防ぐための先回りに過ぎず、実際の業務ルールの検証はこのService層が最終的な砦です。フォームの`disabled`→Bean Validation→アプリ層チェックという多層防御の考え方は[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)と同じです。
+
 ### 状態遷移の冪等性
 
 `updateStatus`（36章）は、指定された`status`が3値のいずれでもなければ400エラーを返しました。一方`updateArchived`のリクエストDTOは`Boolean`1つだけで、`true`/`false`以外の値を送ること自体がJSONのレベルであり得ないため、「値として不正」というエラーは発生しません。代わりに考慮したのが、**既に同じ状態への変更が重複して届いたときの振る舞い**です。

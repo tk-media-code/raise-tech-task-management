@@ -369,7 +369,7 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 
 ## 38. アーカイブ：フラグ更新と冪等性
 
-要件定義5.7のアーカイブ機能を、`status`の4値目としてではなく独立した`isArchived`フラグで表現する設計理由と、`PATCH /api/cards/{id}/archive`が「同じ状態への変更が重複しても200を返す」という冪等性を持つ理由、復元時にpositionを採番し直す理由を解説します。
+要件定義5.7のアーカイブ機能を、`status`の4値目としてではなく独立した`isArchived`フラグで表現する設計理由、「完了」列のカードのみアーカイブ可能というBean Validationでは表現できない制約をService層で検証する方法、`PATCH /api/cards/{id}/archive`が「同じ状態への変更が重複しても200を返す」という冪等性を持つ理由、復元時にpositionを採番し直す理由を解説します。
 
 📄 詳細：[10-update-api.md](./10-update-api.md#38-アーカイブフラグ更新と冪等性)
 

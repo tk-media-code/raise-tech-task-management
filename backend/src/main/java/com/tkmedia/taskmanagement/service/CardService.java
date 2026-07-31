@@ -369,6 +369,13 @@ public class CardService {
 
 		if (archived) {
 			// --- 3a. アーカイブする ---
+			// 「完了」列のカードのみアーカイブ対象とする（プロトタイプprototype/app.jsの
+			// archiveCardと同じ業務ルール）。作業中・未着手のタスクを誤って退避してしまう事故を防ぐため、
+			// Bean Validationでは表現できないこの制約をここでチェックする
+			// （32章のラベル色チェックと同じ「業務ルールの検証はService層」という方針）。
+			if (!"done".equals(card.getStatus())) {
+				throw new InvalidRequestException("完了ステータスのカードのみアーカイブできます");
+			}
 			// statusとpositionはあえて変更しない。要件定義5.7「元のステータスへ復元できる」を
 			// 満たすため、アーカイブ中も「どの列の何番目にいたか」という情報をそのまま保持しておく。
 			// 元の列（例：done）には欠番ができるが、updateStatusが移動元列を詰め直さないのと同じ理由で

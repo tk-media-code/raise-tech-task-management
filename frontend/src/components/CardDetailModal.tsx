@@ -333,7 +333,16 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
             <button
               type="button"
               onClick={handleArchiveToggle}
-              disabled={archiving}
+              // 「完了」ステータスのカードのみアーカイブできる（プロトタイプprototype/app.jsの
+              // populateCardModalと同じ業務ルール。バックエンドCardService.updateArchivedも
+              // 同じ制約を検証しており、ここでの無効化はサーバーへの無駄なリクエストを防ぐための
+              // 先回りに過ぎない）。復元（isArchived=trueから戻す）にはこの制約が無い。
+              disabled={archiving || (!card.isArchived && card.status !== 'done')}
+              title={
+                !card.isArchived && card.status !== 'done'
+                  ? '完了ステータスのカードのみアーカイブできます'
+                  : undefined
+              }
               className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {archiving ? '処理中…' : card.isArchived ? '復元' : 'アーカイブ'}
