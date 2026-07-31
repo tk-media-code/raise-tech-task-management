@@ -26,6 +26,7 @@
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
 | 28〜32章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
+| 33〜37章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
 
 ## 目次
 
@@ -61,6 +62,11 @@
 30. [バリデーションエラーを400で返す](./09-write-api-validation.md#30-バリデーションエラーを400で返す)
 31. [登録処理の中身](./09-write-api-validation.md#31-登録処理の中身)
 32. [アプリケーション層での重複・許可値チェック](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)
+33. [更新系API（PUT/PATCH）の作り方](./10-update-api.md#33-更新系apiputpatchの作り方)
+34. [ダーティチェックによる更新](./10-update-api.md#34-ダーティチェックによる更新)
+35. [コレクションの差し替え——ラベルの全削除＋再作成](./10-update-api.md#35-コレクションの差し替えラベルの全削除再作成)
+36. [ステータス変更と列内の並び替え](./10-update-api.md#36-ステータス変更と列内の並び替え)
+37. [CORSへの追記](./10-update-api.md#37-corsへの追記)
 
 ---
 
@@ -317,6 +323,46 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 ラベル新規作成（要件定義5.5）を教材に、Bean Validationでは表現できない2種類の検証（色が既定パレットに含まれるか、名前が同一ボード内で重複していないか）を`InvalidRequestException`で400として返す実装を解説します。DBのUNIQUE制約を使わずアプリ層でチェックする理由（`DataIntegrityViolationException`用ハンドラが無いこと、`ddl-auto=update`が既存テーブルへの制約追加を保証しないこと）も扱います。
 
 📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)
+
+---
+
+## 33. 更新系API（PUT/PATCH）の作り方
+
+カード編集用の`PUT /api/cards/{id}`と、ステータス変更用の`PATCH /api/cards/{id}/status`を教材に、「リソース全体の置き換え」と「一部だけの変更」というPUTとPATCHの使い分けを解説します。GET・POSTと同じく素の型を返す（`ResponseEntity`を使わない）理由も扱います。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#33-更新系apiputpatchの作り方)
+
+---
+
+## 34. ダーティチェックによる更新
+
+`create`と違い`update`に`save()`の明示呼び出しが無い理由を、Hibernateのダーティチェック（変更検知）の仕組みから解説します。`@UpdateTimestamp`が更新系APIの実装によって初めて意味を持つようになった経緯も扱います。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#34-ダーティチェックによる更新)
+
+---
+
+## 35. コレクションの差し替え——ラベルの全削除＋再作成
+
+カード編集でのラベル付け替えを、「全削除してから入れ直す」単純な方針で実装した理由と、`@Modifying`による一括DELETE（メソッド名からの派生削除クエリとの違い）を解説します。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#35-コレクションの差し替えラベルの全削除再作成)
+
+---
+
+## 36. ステータス変更と列内の並び替え
+
+ドラッグ＆ドロップによる列間の移動・列内の並べ替え（要件5.3）を1本のロジックで扱う`updateStatus`の実装を解説します。position値を列全体で振り直す理由、移動元列を詰め直さない理由、`findMaxPosition`とは異なる母集団（アーカイブ済みを除外）を使う理由を扱います。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#36-ステータス変更と列内の並び替え)
+
+---
+
+## 37. CORSへの追記
+
+PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新する必要があることを解説します。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#37-corsへの追記)
 
 ---
 

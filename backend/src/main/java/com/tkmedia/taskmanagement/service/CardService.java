@@ -3,6 +3,8 @@ package com.tkmedia.taskmanagement.service;
 import com.tkmedia.taskmanagement.dto.CardCreateRequest;
 import com.tkmedia.taskmanagement.dto.CardResponse;
 import com.tkmedia.taskmanagement.dto.CardSearchCondition;
+import com.tkmedia.taskmanagement.dto.CardStatusUpdateRequest;
+import com.tkmedia.taskmanagement.dto.CardUpdateRequest;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.entity.Board;
 import com.tkmedia.taskmanagement.entity.Card;
@@ -21,6 +23,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +41,12 @@ public class CardService {
 	// 作成時のステータスがこの1択しかなく、クライアントに選ばせる理由が無いため
 	// （ワイヤーフレーム6.2①の「＋ カードを追加」も未着手列の下にしか無い）。
 	private static final String INITIAL_STATUS = "todo";
+
+	// ステータスとして許可される3値。Card.java の @Check(constraints = "status in ('todo', 'doing', 'done')")
+	// というDB側の制約、およびフロントエンドのlib/status.ts の STATUSES と値を揃える必要がある
+	// （ずれると片方は通っても片方で拒否される、または片方の制約でDBエラーになる）。
+	// updateStatus() で、リクエストのstatusがこの3値以外でないかを確認するために使う。
+	private static final Set<String> ALLOWED_STATUSES = Set.of("todo", "doing", "done");
 
 	private final CardRepository cardRepository;
 	private final CardLabelRepository cardLabelRepository;
@@ -187,6 +196,149 @@ public class CardService {
 		// 実行前に永続化コンテキストの変更を自動的にflushする（デフォルトのFlushModeType.AUTO）ため、
 		// 直前の5.で保存したcard_label行も、追加のflush操作なしでこのSELECTの結果に反映される。
 		return toResponses(List.of(saved)).get(0);
+	}
+
+	/**
+	 * カードを編集する（タイトル・説明・期日・ラベル）。
+	 * 所属ボード・ステータス・列内の並び順はこのメソッドの対象外（前者はスコープ外の機能、
+	 * 後2つは{@link #updateStatus(Integer, CardStatusUpdateRequest)}が担う。理由はCardUpdateRequestの
+	 * クラスコメント参照）。
+	 *
+	 * @param id      更新対象のカードID
+	 * @param request 更新内容（タイトル・説明・期日・ラベル）
+	 * @return 更新後のカードのDTO（付与したラベルを含む）
+	 * @throws ResourceNotFoundException 該当カードが存在しない場合
+	 * @throws InvalidRequestException   指定したラベルIDの一部が、このカードの所属ボードに存在しない場合
+	 */
+	@Transactional
+	public CardResponse update(Integer id, CardUpdateRequest request) {
+		// --- 1. カードの取得 ---
+		// createにあったボードの存在確認は不要（boardIdをリクエストで受け取らないため）。
+		// 代わりに、このカードが既に持っているBoard（findByIdWithBoardでjoin fetch済み）を
+		// そのままラベル検証（3.）に使う。
+		Card card = cardRepository.findByIdWithBoard(id)
+				.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
+
+		// --- 2. 正規化：createと同じヘルパーを再利用する ---
+		String title = request.title().trim();
+		String description = normalizeDescription(request.description());
+		List<Integer> labelIds = normalizeLabelIds(request.labelIds());
+
+		// --- 3. ラベルの検証：createと同じロジック（ボードIDはリクエストではなくcardから取る点のみ違う） ---
+		List<Label> labels = labelIds.isEmpty()
+				? Collections.emptyList()
+				: labelRepository.findByBoardIdAndIdIn(card.getBoard().getId(), labelIds);
+		if (labels.size() != labelIds.size()) {
+			throw new InvalidRequestException("指定されたラベルの一部が、このボードに存在しません");
+		}
+
+		// --- 4. カード本体の更新 ---
+		// card は findByIdWithBoard で取得した永続状態のエンティティであり、このメソッドの
+		// @Transactionalが開始したトランザクション・永続化コンテキストの中でまだ管理され続けている。
+		// そのためcreateのcardRepository.save(card)のような明示的な保存呼び出しは不要で、
+		// setterで値を変えるだけでよい。トランザクションがコミットされる際、Hibernateが
+		// 「取得時点の値」と「現在の値」を比較する変更検知（ダーティチェック）を自動的に行い、
+		// 差分のあるフィールドを含むUPDATE文を発行してくれる（docs/spring-boot/10-update-api.md参照）。
+		// status/isArchived/position/boardはこのメソッドの対象外なので、ここでは一切触れない。
+		card.setTitle(title);
+		card.setDescription(description);
+		card.setDueDate(request.dueDate());
+		// updatedAtはCardエンティティの@UpdateTimestampがこのあとのUPDATE時に自動更新するため、
+		// ここでは何もしない（createにおけるcreatedAt/updatedAtの扱いと対になる挙動）。
+
+		// --- 5. ラベルの差し替え：既存の付与をすべて削除してから、選択されたものを入れ直す ---
+		// 「現在のcard_label行と新しいlabelIdsの差分だけを削除・追加する」ほうが発行されるSQLは
+		// 少なく済むが、1枚のカードに付くラベルは要件上せいぜい数枚に留まり、差分計算のコードを
+		// 足す複雑さに見合わない。ここでは「全削除→全追加」という単純な方針を採る。
+		cardLabelRepository.deleteByCardId(id);
+		if (!labels.isEmpty()) {
+			List<CardLabel> cardLabels = labels.stream()
+					.map(label -> {
+						CardLabel cardLabel = new CardLabel();
+						// createと同じ理由でidは設定しない（@MapsIdがINSERT時に導出する）。
+						cardLabel.setCard(card);
+						cardLabel.setLabel(label);
+						return cardLabel;
+					})
+					.toList();
+			cardLabelRepository.saveAll(cardLabels);
+		}
+
+		// --- 6. レスポンスDTOへの変換 ---
+		// deleteByCardIdは@Modifyingによる一括DELETEであり、呼び出した時点で即座にDBへ反映される
+		// （直後のsaveAllが発行するINSERTを待つ必要はない）。そのため、以前と同じラベルを選び直した
+		// 場合でも、削除が先に完了しているぶん一意制約違反にはならない。
+		return toResponses(List.of(card)).get(0);
+	}
+
+	/**
+	 * カードのステータスを変更する（列内での並び順の変更を含む）。
+	 * ドラッグ＆ドロップによる列間移動・列内の並べ替え、カード上の「移動」メニュー、
+	 * カード詳細モーダルのステータス選択、いずれの操作導線からも呼ばれる（要件定義5.3）。
+	 *
+	 * @param id      対象カードのID
+	 * @param request 変更後のステータスと、移動先列内での挿入位置（省略時は列の末尾）
+	 * @return 更新後のカードのDTO
+	 * @throws ResourceNotFoundException 該当カードが存在しない場合
+	 * @throws InvalidRequestException   statusが"todo"/"doing"/"done"のいずれでもない場合
+	 */
+	@Transactional
+	public CardResponse updateStatus(Integer id, CardStatusUpdateRequest request) {
+		// --- 1. カードの取得 ---
+		Card card = cardRepository.findByIdWithBoard(id)
+				.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
+
+		// --- 2. ステータス値の検証 ---
+		// @NotBlankは「空文字でないこと」しか保証しないため、3値のいずれかであることはここで確認する
+		// （CardCreateRequestのラベルIDと同じ「業務ルールの検証はService層」という方針）。
+		String newStatus = request.status();
+		if (!ALLOWED_STATUSES.contains(newStatus)) {
+			throw new InvalidRequestException("ステータスは todo / doing / done のいずれかで指定してください");
+		}
+
+		// --- 3. 移動先列（同じボード・新ステータス）の現在の並びを取得 ---
+		Integer boardId = card.getBoard().getId();
+		List<Card> destinationColumn =
+				cardRepository.findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc(boardId, newStatus);
+
+		// 同一列内での並べ替え（移動元・移動先が同じステータス）の場合、対象カード自身が
+		// 上のリストに既に含まれている。いったん取り除いてから改めて挿入位置に差し込むことで、
+		// 「列間の移動」と「列内の並べ替え」を同じ1本のロジックで扱えるようにする
+		// （列間移動の場合、対象カードはまだ旧ステータスのままなのでこのリストには含まれておらず、
+		// removeIfは何もしない no-op になる）。
+		destinationColumn.removeIf(c -> c.getId().equals(card.getId()));
+
+		// --- 4. 挿入位置を決める ---
+		// positionが未指定（null）なら列の末尾（＝現在の件数と同じインデックス）に挿入する。
+		// 指定されている場合も、リストのサイズを超える値はサイズにクランプする。ドラッグ＆ドロップで
+		// 列の最後尾へドロップしたとき、フロントエンドは「その時点の件数」をpositionとして送ってくる
+		// ことがあり、それを「末尾への挿入」として素直に扱うため（範囲外の値を400エラーにはしない）。
+		int insertIndex = request.position() == null
+				? destinationColumn.size()
+				: Math.min(request.position(), destinationColumn.size());
+		destinationColumn.add(insertIndex, card);
+
+		// --- 5. 移動先列全体のpositionを1から振り直す ---
+		// 「対象カードのpositionだけを挿入先の値に書き換える」方式では、同じ列の他のカードと
+		// position値が重複してしまう。ここでは移動先列に並ぶカード全員（対象カードを含む）を
+		// 正しい順序で並べたうえで、1から連番を振り直すことで重複のない一意な順序を保証する。
+		// destinationColumnの各要素は findBy... で取得した永続状態のエンティティのため、
+		// setPositionで書き換えるだけでダーティチェックの対象になり、コミット時に差分のあるカードだけ
+		// UPDATE文が発行される（明示的なsaveの呼び出しは不要。update()のコメントと同じ理由）。
+		for (int i = 0; i < destinationColumn.size(); i++) {
+			destinationColumn.get(i).setPosition(i + 1);
+		}
+		// 対象カードのstatusは、position再採番の対象に含めた後に変更する。
+		// destinationColumnは「ステータス変更前の対象カード」を含めたまま並べ替えに使っているので、
+		// 順序の計算そのものはstatusの値に依存しない（ここで変更しても上のループ結果には影響しない）。
+		card.setStatus(newStatus);
+
+		// 移動元の列（旧ステータス）は詰め直さない。positionに欠番ができるだけで、
+		// 「昇順に並べたときの順序」自体は保たれる（例：1, 2, 4 という並びでも順序は崩れない）。
+		// 次にその列で並べ替えが発生すれば、このメソッドが列全体を振り直すため、欠番は自然に解消される。
+
+		// --- 6. レスポンスDTOへの変換 ---
+		return toResponses(List.of(card)).get(0);
 	}
 
 	// descriptionの正規化：未入力(null)・空白のみの入力を、DB上は同じ意味であるnullへ統一する。

@@ -1,37 +1,47 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { apiPaths } from '../api/client'
 import { useApi } from '../hooks/useApi'
-import { STATUS_LABELS } from '../lib/status'
-import type { CardResponse } from '../types/api'
+import { useMutation } from '../hooks/useMutation'
+import { isCardStatus, STATUSES, STATUS_LABELS } from '../lib/status'
+import type { CardResponse, CardStatusUpdateRequest, CardUpdateRequest } from '../types/api'
 import DueDateBadge from './DueDateBadge'
-import LabelChip from './LabelChip'
+import LabelPicker from './LabelPicker'
 import StatusMessage from './StatusMessage'
 
 type Props = {
   /** 表示するカードのID。nullなら閉じている状態 */
   cardId: number | null
+  /** 保存・ステータス変更に成功したとき（一覧の再取得を親に依頼するため）に呼ばれる */
+  onUpdated: () => void
   /** モーダルを閉じるとき（× ／背景クリック／Escape）に呼ばれる */
   onClose: () => void
 }
 
 /**
  * カード詳細モーダル（要件定義 6.2 ④）。
- * タイトル・ボード名・ステータス・説明・期日・ラベルを表示する。
+ * タイトル・ステータス・説明・期日・ラベルを編集し、要件5.2「カード詳細を開き、説明・期日・
+ * ラベルを追加/変更できる」に対応する。アーカイブ・削除はまだ書き込みAPI（DELETE等）が
+ * 未実装のため、引き続きボタン自体を置いていない。
  *
- * 現時点は閲覧専用。編集・アーカイブ・削除は書き込みAPI（POST/PUT/DELETE）が
- * 未実装のため、ボタン自体を置いていない（押せても何も起きないボタンを置くより、
- * 「無い」ことが見て分かる方が誤解が少ない）。
+ * タイトル・説明・期日・ラベルは「保存」ボタンを押すまでサーバーへ送らない
+ * （CardCreateFormと同じ、ドラフトを溜めてから確定するフォーム）。一方ステータスだけは
+ * <select>を変更した瞬間にPATCHを送る。この非対称は要件5.3の設計そのもの
+ * （ステータス変更はドラッグ＆ドロップ等の「即座に切り替わる」操作の一つであり、
+ * 他の項目のように「保存」を挟む編集操作ではない）を反映している。そのためstatusだけは
+ * 他の項目のようなローカルの下書きstateを持たず、<select value={card.status}>のように
+ * 取得したcardの値へ直接紐づけている（PATCH成功後のrefetchで新しい値に置き換わる）。
  *
- * 一覧（CrossBoardView・BoardDetailView）が既に持っているカードの情報を使い回さず、
+ * 一覧（CrossBoardView・BoardDetailView・SearchView）が既に持っているカードの情報を使い回さず、
  * 開くたびに GET /api/cards/{id} を再取得している。理由は3つ:
  * (1) 一覧は archived=false で絞り込んだ結果であり、将来アーカイブ画面・検索結果画面
  *     からもこの同じモーダルを開く必要がある（CardController.get はアーカイブ済みカードも
  *     返せる設計になっている）。id指定の取得だけが、その両方の画面で通用する。
- * (2) 書き込みAPI実装後は一覧が数秒古くなり得る。
+ * (2) 他の操作で一覧が数秒古くなり得る。
  * (3) useApiのpath===null（＝通信しない）という設計を実際に使う唯一の場所であり、
  *     ここで使わないとその設計が机上のものになってしまう。
  */
-function CardDetailModal({ cardId, onClose }: Props) {
+function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
   // フックは「毎回まったく同じ順序で同じ回数」呼ばれる必要がある。
   // そのため、閉じているとき（cardId===null）に早期returnするのは
   // すべてのフックを呼び終えたあと。フックより前にreturnすると、
@@ -40,8 +50,48 @@ function CardDetailModal({ cardId, onClose }: Props) {
   //
   // useApiにnullを渡すと通信しない。閉じているあいだ無駄なリクエストが飛ばず、
   // 開いた瞬間にだけ GET /api/cards/{id} が走る。
-  const { data: card, loading, error } = useApi<CardResponse>(
-    cardId === null ? null : apiPaths.card(cardId),
+  const cardPath = cardId === null ? null : apiPaths.card(cardId)
+  const { data: card, loading, error, refetch } = useApi<CardResponse>(cardPath)
+
+  // タイトル・説明・期日・ラベルの下書き（「保存」を押すまでサーバーには送らない編集中の値）。
+  // useStateの初期値ではなく下のuseEffectで詰めるのは、cardが「開いた直後はnull、
+  // GET完了後に値が入る」という2段階を経るため（useStateの初期値は初回レンダリング時にしか
+  // 使われず、あとから届くcardの値を反映できない）。
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [labelIds, setLabelIds] = useState<number[]>([])
+
+  useEffect(() => {
+    if (card === null) return
+    setTitle(card.title)
+    setDescription(card.description ?? '')
+    setDueDate(card.dueDate ?? '')
+    setLabelIds(card.labels.map((label) => label.id))
+    // 依存配列はcard（オブジェクト）自体。cardIdだけを見ていると、同じカードを開いたまま
+    // 「保存」してcardが再取得された（＝新しいオブジェクトになった）ときにフォームへ
+    // 反映し直されない。サーバー側の正規化後の値（titleのtrimなど）を表示に反映するためにも、
+    // card自体の変化を捉える必要がある。
+  }, [card])
+
+  // カード編集（PUT）。cardIdがnullの間（モーダルが閉じている間）はmutateを呼ぶボタン自体が
+  // 描画されないため、pathには実害の無いプレースホルダー（空文字列）を渡す
+  // （hooks/useMutation.tsのpath引数のコメント参照）。
+  const { mutate: save, submitting: saving, error: saveError } = useMutation<CardUpdateRequest, CardResponse>(
+    'PUT',
+    cardId === null ? '' : apiPaths.card(cardId),
+  )
+
+  // ステータス変更（PATCH）。位置（position）はここでは送らない＝常に移動先列の末尾へ置く。
+  // 列内の並び替えという細かい制御はドラッグ＆ドロップ側の役割で、このセレクトボックスは
+  // 「とりあえずステータスだけ動かす」簡易な手段として割り切っている。
+  const {
+    mutate: changeStatus,
+    submitting: changingStatus,
+    error: statusError,
+  } = useMutation<CardStatusUpdateRequest, CardResponse>(
+    'PATCH',
+    cardId === null ? '' : apiPaths.updateCardStatus(cardId),
   )
 
   useEffect(() => {
@@ -68,6 +118,48 @@ function CardDetailModal({ cardId, onClose }: Props) {
 
   if (cardId === null) return null
 
+  const titleTrimmed = title.trim()
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    // ブラウザ標準のフォーム送信（ページ全体のリロードを伴う）を止め、
+    // 代わりにfetchによる非同期送信（useMutationのsave）に置き換える。
+    event.preventDefault()
+
+    const updated = await save({
+      title: titleTrimmed,
+      // 空文字列とnullをどちらも「未設定」として扱うのはバックエンド（CardService.normalizeDescription）
+      // と同じ判断。CardCreateForm.handleSubmitと同じ正規化。
+      description: description.trim() === '' ? null : description.trim(),
+      dueDate: dueDate === '' ? null : dueDate,
+      labelIds,
+    })
+    // saveは失敗時にnullを返す（例外は投げない。hooks/useMutation.ts参照）。
+    // 失敗時はsaveErrorに詳細が入っているので、ここでは早期returnして
+    // フォームの入力内容をそのまま残す。
+    if (updated === null) return
+
+    // このモーダル自身のcard（useApi）を再取得しつつ、親（一覧を持つページ）にも
+    // 再取得を依頼する。要件5.4「横断ビュー上でカードを編集…すると、元のボード詳細画面にも
+    // 反映される」は、この2つのrefetchによって満たされる。
+    refetch()
+    onUpdated()
+  }
+
+  async function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
+    const nextStatus = event.target.value
+    // <select>のvalueは実行時にはただの文字列で、CardStatusであることをTypeScriptは
+    // 保証してくれない（lib/status.tsのisCardStatusと同じ注意点）。ここでは
+    // STATUSES.map(...)から生成した<option>しか存在しないため実際には常にtrueになるが、
+    // 型を通すための型ガードとして扱う。
+    if (!isCardStatus(nextStatus)) return
+
+    const updated = await changeStatus({ status: nextStatus })
+    if (updated === null) return
+
+    refetch()
+    onUpdated()
+  }
+
   return (
     <div
       // fixed inset-0: 画面全体を覆うオーバーレイ。z-50で他の要素より前面に出す。
@@ -89,7 +181,9 @@ function CardDetailModal({ cardId, onClose }: Props) {
         aria-label="カード詳細"
       >
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
-          {/* 読み込み中はタイトルがまだ無いので、枠だけ先に見せる */}
+          {/* 読み込み中はタイトルがまだ無いので、枠だけ先に見せる。
+              入力中の下書き（title state）ではなく取得済みのcard.titleを表示するのは、
+              「保存」前の見出しは常に確定済みの値を示すべきという判断による。 */}
           <h2 className="text-base font-bold">{card?.title ?? 'カード詳細'}</h2>
           <button
             type="button"
@@ -107,54 +201,108 @@ function CardDetailModal({ cardId, onClose }: Props) {
             <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
           )}
 
-          {/* cardがnullでないときだけ中身を描く。`&&`の左辺がnullやfalseだとReactは
-              何も描画しないが、左辺が数値の0だと画面に「0」がそのまま出てしまう
-              （Reactでよくあるバグ）。ここはboolean判定なので問題ない。 */}
+          {/* cardがnullでないときだけ編集フォームを描く。読み込み中・保存後の再取得中は
+              一瞬cardがnullに戻る（hooks/useApi.tsの仕様）ため、その間はフォームごと消える
+              （BoardDetailView等が新規作成後の再取得中に3列を一時的に隠すのと同じ挙動）。 */}
           {card !== null && (
-            <dl className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <p className="text-xs text-slate-500">ボード：{card.boardName}</p>
+
               <div>
-                <dt className="text-xs font-semibold text-slate-500">ボード</dt>
-                <dd>{card.boardName}</dd>
+                <label htmlFor="card-detail-title" className="text-xs font-semibold text-slate-500">
+                  タイトル
+                </label>
+                <input
+                  id="card-detail-title"
+                  type="text"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  maxLength={200}
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
               </div>
+
               <div>
-                <dt className="text-xs font-semibold text-slate-500">ステータス</dt>
-                <dd>{STATUS_LABELS[card.status]}</dd>
+                <label htmlFor="card-detail-status" className="text-xs font-semibold text-slate-500">
+                  ステータス
+                </label>
+                <select
+                  id="card-detail-status"
+                  // 他の項目と違い、valueは下書きstateではなくcard.statusへ直接紐づける
+                  // （このコンポーネントのdocblock参照）。
+                  value={card.status}
+                  onChange={handleStatusChange}
+                  disabled={changingStatus}
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                >
+                  {STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {STATUS_LABELS[status]}
+                    </option>
+                  ))}
+                </select>
+                {statusError !== null && (
+                  <StatusMessage kind="error">{statusError.message}</StatusMessage>
+                )}
               </div>
+
               <div>
-                <dt className="text-xs font-semibold text-slate-500">説明・メモ</dt>
-                {/* whitespace-pre-wrap: DBに入っている改行をそのまま表示する。
-                    JSXは文字列をテキストとして描画するので、HTMLタグとして解釈されない
-                    （prototype/app.jsのescapeHtml相当を自分で書く必要はない）。 */}
-                <dd className="whitespace-pre-wrap text-slate-700">
-                  {card.description ?? <span className="text-slate-400">（未設定）</span>}
-                </dd>
+                <label htmlFor="card-detail-description" className="text-xs font-semibold text-slate-500">
+                  説明・メモ
+                </label>
+                <textarea
+                  id="card-detail-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={4}
+                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                />
               </div>
+
               <div>
-                <dt className="text-xs font-semibold text-slate-500">期日</dt>
-                <dd>
-                  {card.dueDate === null ? (
-                    <span className="text-slate-400">（未設定）</span>
-                  ) : (
-                    <DueDateBadge dueDate={card.dueDate} />
-                  )}
-                </dd>
+                <label htmlFor="card-detail-due-date" className="text-xs font-semibold text-slate-500">
+                  期日
+                </label>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    id="card-detail-due-date"
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                  {/* 編集中の下書き（dueDate）に対して、期限切れ/期限間近をその場で示す
+                      （要件5.6）。ワイヤーフレーム6.2④の「期日: 🔴 2026/07/15」に対応する。 */}
+                  {dueDate !== '' && <DueDateBadge dueDate={dueDate} />}
+                </div>
               </div>
+
               <div>
-                <dt className="text-xs font-semibold text-slate-500">ラベル</dt>
-                <dd className="mt-1 flex flex-wrap gap-1">
-                  {card.labels.length === 0 ? (
-                    <span className="text-slate-400">（なし）</span>
-                  ) : (
-                    card.labels.map((label) => <LabelChip key={label.id} label={label} />)
-                  )}
-                </dd>
+                <p className="text-xs font-semibold text-slate-500">ラベル</p>
+                <div className="mt-1">
+                  <LabelPicker boardId={card.boardId} selectedLabelIds={labelIds} onChange={setLabelIds} />
+                </div>
               </div>
-            </dl>
+
+              {saveError !== null && <StatusMessage kind="error">{saveError.message}</StatusMessage>}
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="submit"
+                  // 要件5.2と同じ「タイトルが未入力の間は押せない」という考え方をここにも適用する。
+                  disabled={titleTrimmed === '' || saving}
+                  title={titleTrimmed === '' ? 'タイトルを入力してください' : undefined}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                >
+                  {saving ? '保存中…' : '保存'}
+                </button>
+              </div>
+            </form>
           )}
         </div>
 
         <footer className="border-t border-slate-200 p-4 text-xs text-slate-400">
-          ※ 現時点では閲覧のみです。編集・アーカイブ・削除は書き込みAPIの実装後に対応します。
+          ※ アーカイブ・削除は書き込みAPIの実装後に対応します。
         </footer>
       </div>
     </div>

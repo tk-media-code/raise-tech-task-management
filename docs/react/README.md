@@ -25,6 +25,7 @@
 | 15章 | コンポーネント設計と状態の持ち方 | [06-component-design.md](./06-component-design.md) |
 | 16〜17章 | npm・Viteとビルド周りの設定 | [07-build-tooling.md](./07-build-tooling.md) |
 | 18〜21章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
+| 22〜26章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
 
 ## 目次
 
@@ -49,6 +50,11 @@
 19. [書き込み（POST）とデータの更新](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
 20. [`useRef`とDOMへの直接アクセス](./08-form-and-mutation.md#20-userefとdomへの直接アクセス)
 21. [フォームの中でネストした作成を行う](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)
+22. [カード詳細モーダルを編集可能にする](./09-editing-and-drag-and-drop.md#22-カード詳細モーダルを編集可能にする)
+23. [dnd-kitの構成要素](./09-editing-and-drag-and-drop.md#23-dnd-kitの構成要素)
+24. [センサーと`activationConstraint`](./09-editing-and-drag-and-drop.md#24-センサーとactivationconstraint)
+25. [ドラッグ＆ドロップだけの楽観的更新](./09-editing-and-drag-and-drop.md#25-ドラッグドロップだけの楽観的更新)
+26. [`DragOverlay`と見た目のコピー](./09-editing-and-drag-and-drop.md#26-dragoverlayと見た目のコピー)
 
 ---
 
@@ -198,7 +204,7 @@
 
 ## 19. 書き込み（POST）とデータの更新
 
-`useApi`をそのまま使えない書き込み処理のために新設した`useCreate`、書き込み後に一覧を最新化する`refetch`、そして「なぜ楽観的更新にしないのか」（並び順の決定権はサーバーにあるという契約）を解説します。ボード一覧のstateを`App.tsx`へリフトアップした経緯——Contextに飛びつく前にまず検討すべき選択肢としてのリフトアップ——と、そのリフトアップが横断ビューへの`boards`受け渡しにもそのまま活きた経緯も扱います。
+`useApi`をそのまま使えない書き込み処理のために新設した`useCreate`（後にPUT/PATCHにも対応する`useMutation`へ一般化。[22章](#22-カード詳細モーダルを編集可能にする)以降参照）、書き込み後に一覧を最新化する`refetch`、そして「なぜ楽観的更新にしないのか」（並び順の決定権はサーバーにあるという契約。ドラッグ＆ドロップにおける例外は[25章](#25-ドラッグドロップだけの楽観的更新)）を解説します。ボード一覧のstateを`App.tsx`へリフトアップした経緯——Contextに飛びつく前にまず検討すべき選択肢としてのリフトアップ——と、そのリフトアップが横断ビューへの`boards`受け渡しにもそのまま活きた経緯も扱います。
 
 📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#19-書き込みpostとデータの更新)
 
@@ -214,9 +220,49 @@
 
 ## 21. フォームの中でネストした作成を行う
 
-ラベルの新規作成（要件定義5.5）を教材に、カード作成フォームの中にもう1つの作成フォーム（ラベル作成）を組み込む実装を解説します。HTMLの`<form>`は入れ子にできないため`onClick`/`onKeyDown`から直接呼び出す設計にしたこと、同じ`useCreate`を型引数だけ変えて2回呼び出し送信中・エラーを独立させたこと、作成した子リソース（ラベル）を親フォームの保留中state（`selectedLabelIds`）へ反映する設計、`ColorSwatchPicker`という新しいcontrolledコンポーネントを扱います。
+ラベルの新規作成（要件定義5.5）を教材に、カード作成フォームの中にもう1つの作成フォーム（ラベル作成）を組み込む実装を解説します。HTMLの`<form>`は入れ子にできないため`onClick`/`onKeyDown`から直接呼び出す設計にしたこと、同じ`useCreate`（現`useMutation`）を型引数だけ変えて2回呼び出し送信中・エラーを独立させたこと、作成した子リソース（ラベル）を親フォームの保留中state（`selectedLabelIds`）へ反映する設計、`ColorSwatchPicker`という新しいcontrolledコンポーネントを扱います。このラベル選択・作成のUIは、後にカード編集でも必要になり`components/LabelPicker.tsx`へ切り出されました（[22章](#22-カード詳細モーダルを編集可能にする)参照）。
 
 📄 詳細：[08-form-and-mutation.md](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)
+
+---
+
+## 22. カード詳細モーダルを編集可能にする
+
+閲覧専用だった`CardDetailModal`を、タイトル・説明・期日・ラベルを編集できるフォームへ書き換えました。「保存」を押すまで送信しない項目（下書きstateを持つ）と、選んだ瞬間に確定するステータス（`card.status`へ直接紐づく`<select>`）という、同じモーダルの中に同居する2種類の更新の性質の違いを解説します。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#22-カード詳細モーダルを編集可能にする)
+
+---
+
+## 23. dnd-kitの構成要素
+
+要件5.3のドラッグ＆ドロップを実現する`@dnd-kit/core`・`@dnd-kit/sortable`の主要な構成要素（`DndContext`・`useDroppable`・`useSortable`・`SortableContext`）を、カード一覧・カード1枚それぞれの実装を教材に解説します。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#23-dnd-kitの構成要素)
+
+---
+
+## 24. センサーと`activationConstraint`
+
+`PointerSensor`・`TouchSensor`・`KeyboardSensor`という3種類のセンサーと、クリック・スクロールとドラッグ開始を区別するための`activationConstraint`（距離・遅延のしきい値）を解説します。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#24-センサーとactivationconstraint)
+
+---
+
+## 25. ドラッグ＆ドロップだけの楽観的更新
+
+[19章](#19-書き込みpostとデータの更新)で見た「楽観的更新にしない」という方針の、唯一の例外を解説します。ドロップ操作が「動いた実感」と表示のズレに直結するという理由、`optimisticCards`をいつ手放すかという設計を扱います。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#25-ドラッグドロップだけの楽観的更新)
+
+---
+
+## 26. `DragOverlay`と見た目のコピー
+
+ドラッグ中にポインタへ追従する見た目を、リスト内の実物ではなく専用の表示コンポーネントとして分離した理由を解説します。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#26-dragoverlayと見た目のコピー)
 
 ---
 
@@ -230,9 +276,8 @@ Reactの入門書には載っているのに、本プロジェクトのコード
 | `useReducer` | state更新のロジックが単純で、`useState`（[7章](#7-stateとusestate)）で足りている |
 | `React.memo`（コンポーネントの再描画抑制） | 再描画コストが問題になるほど重いコンポーネントがまだ無い |
 | エラーバウンダリ | 現状のエラー処理はAPI通信の失敗（[11章](#11-データ取得の3状態とレースコンディション)のstate）に限られ、予期しない描画エラー自体を捕捉する仕組みは未導入 |
-| ドラッグ＆ドロップ | ステータスの変更はドラッグ＆ドロップで行う設計（要件5.3）だが、更新系API（PUT）が未実装のため見送られている |
 
-`useCallback`（[19章](#19-書き込みpostとデータの更新)の`useApi.refetch`・`useCreate.create`）・`useRef`（[20章](#20-userefとdomへの直接アクセス)）は、カード・ボードの新規作成の実装にあわせて登場したため、このリストから外れました。残る機能も、Write系API（PUT/DELETE）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
+`useCallback`（[19章](#19-書き込みpostとデータの更新)の`useApi.refetch`・`useMutation.mutate`）・`useRef`（[20章](#20-userefとdomへの直接アクセス)）は、カード・ボードの新規作成の実装にあわせて登場したため、このリストから外れました。ドラッグ＆ドロップも、カードの更新機能（要件5.3）の実装により[23〜26章](./09-editing-and-drag-and-drop.md)で扱うようになったため、このリストから外れています。残る機能も、Write系API（DELETE等）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
 
 ## このドキュメントの更新ルール
 

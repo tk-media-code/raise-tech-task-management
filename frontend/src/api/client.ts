@@ -62,7 +62,7 @@ async function readProblemDetail(response: Response): Promise<ProblemDetail | nu
  *
  * 責務の分担: このファイル（クライアント）が持つのは「APIがどこにあるか」（ベースURL）と
  * 「HTTPレスポンスをどう値かErrorに変えるか」。Reactのライフサイクル（state・再フェッチの
- * タイミングなど）は一切知らず、hooks/useApi.ts・hooks/useCreate.ts 側の責務にしている。
+ * タイミングなど）は一切知らず、hooks/useApi.ts・hooks/useMutation.ts 側の責務にしている。
  *
  * @param path APIのパス（例: "/api/boards"）。ベースURLはこの関数が前置する
  * @param init fetchにそのまま渡すオプション（method・headers・body・signalなど）
@@ -118,28 +118,74 @@ export async function fetchJson<T>(path: string, signal: AbortSignal): Promise<T
 }
 
 /**
- * APIをPOSTで叩き、レスポンスのJSONを指定した型として返す
- * （docs/typescript/06-async.md 15章参照）。
+ * APIをボディ付きのHTTPメソッド（POST/PUT/PATCH）で叩き、レスポンスのJSONを指定した型として返す。
+ * {@link postJson}・{@link putJson}・{@link patchJson}の3つがこの関数に委譲する
+ * （GET用の{@link fetchJson}・POST用の{@link postJson}が両方requestに委譲していたのと同じ、
+ * 「メソッドが違うだけで、エラーの扱い方・JSONへの変換方法は完全に共通」という考え方）。
  *
- * @param path APIのパス（例: "/api/cards"）
- * @param body リクエストボディに乗せるオブジェクト。JSON.stringifyでJSON文字列に変換して送る
- * @returns パースしたレスポンスJSON（作成されたリソースを表すDTO）
+ * @param method HTTPメソッド
+ * @param path   APIのパス（例: "/api/cards"）
+ * @param body   リクエストボディに乗せるオブジェクト。JSON.stringifyでJSON文字列に変換して送る
+ * @returns パースしたレスポンスJSON
  * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
  */
 // fetchJsonと違い、signalを引数に取らない（＝中断できない）のは意図的な非対称。
-// GETの中断は「表示しても無駄になった結果を捨てる」だけの安全な操作だが、POSTは
+// GETの中断は「表示しても無駄になった結果を捨てる」だけの安全な操作だが、書き込み系（POST/PUT/PATCH）は
 // 呼び出し元でfetchをabortしても、サーバー側では既に処理が進行・完了している可能性があり、
 // クライアント側のPromiseを中断してもDBへの書き込みそのものは取り消せない
-// （「中断したつもり」なのに実際には登録されている、という状態を防ぐため、
-// あえて中断の手段を用意していない）。
-export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+// （「中断したつもり」なのに実際には登録・更新されている、という状態を防ぐため、
+// あえて中断の手段を用意していない）。この考え方はPUT/PATCHでも変わらない。
+async function sendJson<TRequest, TResponse>(
+  method: 'POST' | 'PUT' | 'PATCH',
+  path: string,
+  body: TRequest,
+): Promise<TResponse> {
   return request<TResponse>(path, {
-    method: 'POST',
+    method,
     // Content-Typeを明示しないと、Jacksonが@RequestBodyをJSONとして解釈してくれない
     // （バックエンドはこのヘッダーを見てボディの読み方を選ぶ）。
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+/**
+ * APIをPOSTで叩き、レスポンスのJSONを指定した型として返す（新規作成用）
+ * （docs/typescript/06-async.md 15章参照）。
+ *
+ * @param path APIのパス（例: "/api/cards"）
+ * @param body リクエストボディに乗せるオブジェクト
+ * @returns パースしたレスポンスJSON（作成されたリソースを表すDTO）
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+export async function postJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+  return sendJson<TRequest, TResponse>('POST', path, body)
+}
+
+/**
+ * APIをPUTで叩き、レスポンスのJSONを指定した型として返す（リソース全体の更新用）。
+ * カード編集（{@code PUT /api/cards/{id}}）で使う。
+ *
+ * @param path APIのパス（例: "/api/cards/1"）
+ * @param body リクエストボディに乗せるオブジェクト
+ * @returns パースしたレスポンスJSON（更新後のリソースを表すDTO）
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+export async function putJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+  return sendJson<TRequest, TResponse>('PUT', path, body)
+}
+
+/**
+ * APIをPATCHで叩き、レスポンスのJSONを指定した型として返す（リソースの部分更新用）。
+ * カードのステータス変更（{@code PATCH /api/cards/{id}/status}）で使う。
+ *
+ * @param path APIのパス（例: "/api/cards/1/status"）
+ * @param body リクエストボディに乗せるオブジェクト
+ * @returns パースしたレスポンスJSON（更新後のリソースを表すDTO）
+ * @throws ApiError HTTPステータスが2xx以外だった場合、またはAPIに到達できなかった場合
+ */
+export async function patchJson<TRequest, TResponse>(path: string, body: TRequest): Promise<TResponse> {
+  return sendJson<TRequest, TResponse>('PATCH', path, body)
 }
 
 /**
@@ -185,8 +231,17 @@ export const apiPaths = {
     return `/api/cards?${query.toString()}`
   },
 
-  /** カード1件（アーカイブ済みかどうかを問わず取得できる） */
+  /**
+   * カード1件（アーカイブ済みかどうかを問わず取得できる）。
+   * GET（詳細取得）だけでなく、PUT（カード編集、components/CardDetailModal.tsx）の送信先としても
+   * 使う。createCard()がcards()と別関数になっているのは、cards()が常にクエリパラメータ
+   * （archived=falseなど）を付ける関数で文字列が一致しないためだが、こちらはGET/PUTのどちらでも
+   * "/api/cards/{id}" という完全に同じ文字列になるため、別名の関数を分ける理由が無い。
+   */
   card: (cardId: number | string) => `/api/cards/${cardId}`,
+
+  /** カードのステータス変更（PATCH）先のパス。列間の移動・列内の並べ替えの両方をここへ送る */
+  updateCardStatus: (cardId: number | string) => `/api/cards/${cardId}/status`,
 
   /** 指定ボードのラベル一覧（検索画面のラベル絞り込みUIで、ボードごとにグループ化する際に使う） */
   boardLabels: (boardId: number | string) => `/api/boards/${boardId}/labels`,

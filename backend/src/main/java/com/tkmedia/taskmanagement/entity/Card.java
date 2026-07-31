@@ -88,7 +88,8 @@ public class Card {
 	private OffsetDateTime createdAt;
 
 	// 更新日時。@UpdateTimestampはINSERT時はcreatedAtと同じくJava側で現在時刻をセットし、
-	// UPDATE時（今回はまだ未実装）にも自動的に値を更新し直してくれる。createdAtとの役割分担は
+	// UPDATE時（CardService.update / updateStatusによるダーティチェック経由のUPDATE発行時）にも
+	// 自動的に値を更新し直してくれる。createdAtとの役割分担は
 	// 「作成時刻は不変」「更新時刻は変更のたびに動く」という違いのみ。
 	@Column(name = "updated_at", nullable = false)
 	@ColumnDefault("now()")

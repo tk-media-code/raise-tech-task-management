@@ -125,3 +125,30 @@ export type LabelCreateRequest = {
   name: string
   color: string
 }
+
+/**
+ * カード編集API（{@code PUT /api/cards/{id}}）のリクエストボディ。
+ * バックエンド: backend/.../dto/CardUpdateRequest.java
+ *
+ * CardCreateRequestと違い、boardId・statusを持たない（理由はバックエンドのCardUpdateRequestの
+ * クラスコメントと同じ：ボード間移動はスコープ外、ステータス変更は別APIの責務）。
+ */
+export type CardUpdateRequest = {
+  title: string
+  description: string | null
+  dueDate: string | null
+  labelIds: number[]
+}
+
+/**
+ * カードのステータス変更API（{@code PATCH /api/cards/{id}/status}）のリクエストボディ。
+ * バックエンド: backend/.../dto/CardStatusUpdateRequest.java
+ *
+ * ドラッグ＆ドロップ（列間移動・列内の並べ替え）、カード上の「移動」メニュー、
+ * カード詳細モーダルのステータス選択、いずれの操作からもこの型でリクエストを送る。
+ */
+export type CardStatusUpdateRequest = {
+  status: CardStatus
+  /** 移動先ステータス列内での挿入位置（0始まり）。省略時（undefined）は列の末尾に挿入される */
+  position?: number
+}
