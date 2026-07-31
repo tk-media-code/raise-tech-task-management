@@ -216,8 +216,10 @@ export const apiPaths = {
    *                         （`?labelIds=1&labelIds=2`形式もバックエンドは受け付けるが、
    *                         URLへの反映のしやすさ＝pages/SearchView.tsxのURLクエリと1対1にできるため
    *                         こちらの形にしている）
+   * @param params.archived  アーカイブ済みカードだけを取得するか（true）、非アーカイブのみか
+   *                         （false、既定）。pages/ArchiveView.tsxだけがtrueを渡す
    */
-  cards: (params: { boardId?: number | string; keyword?: string; labelIds?: number[] } = {}) => {
+  cards: (params: { boardId?: number | string; keyword?: string; labelIds?: number[]; archived?: boolean } = {}) => {
     const query = new URLSearchParams()
     if (params.boardId !== undefined) query.set('boardId', String(params.boardId))
     if (params.keyword !== undefined && params.keyword !== '') query.set('keyword', params.keyword)
@@ -226,8 +228,8 @@ export const apiPaths = {
     }
     // archivedはバックエンド側の既定値もfalseだが、あえて明示する。
     // 「アーカイブ済みは表示しない」は画面の仕様（要件5.7）であって、
-    // サーバーの既定値に暗黙で依存すべきではないため。
-    query.set('archived', 'false')
+    // サーバーの既定値に暗黙で依存すべきではないため（未指定時はfalseに倒す）。
+    query.set('archived', String(params.archived ?? false))
     return `/api/cards?${query.toString()}`
   },
 
@@ -242,6 +244,9 @@ export const apiPaths = {
 
   /** カードのステータス変更（PATCH）先のパス。列間の移動・列内の並べ替えの両方をここへ送る */
   updateCardStatus: (cardId: number | string) => `/api/cards/${cardId}/status`,
+
+  /** カードのアーカイブ状態変更（PATCH）先のパス。アーカイブする・復元する（要件5.7）の両方をここへ送る */
+  updateCardArchive: (cardId: number | string) => `/api/cards/${cardId}/archive`,
 
   /** 指定ボードのラベル一覧（検索画面のラベル絞り込みUIで、ボードごとにグループ化する際に使う） */
   boardLabels: (boardId: number | string) => `/api/boards/${boardId}/labels`,

@@ -142,4 +142,4 @@ public class TaskManagementApplication {
 | 例外処理                       | 実装済み（404・400）                   | `exception/GlobalExceptionHandler.java`（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)、[30章](./09-write-api-validation.md#30-バリデーションエラーを400で返す)参照） |
 | テスト（独自ロジック）         | 未実装（`contextLoads`のみ）         | `TaskManagementApplicationTests.java`                                                                         |
 
-現時点ではRead系（GET）・カード/ボードの新規登録（POST）に加え、カードの編集・ステータス変更（PUT/PATCH、[33〜37章](./10-update-api.md)）が実装済みです。カードの削除・アーカイブ、ボードの改名・削除・並べ替えといった残りのWrite系API（DELETE等）や、独自ロジックに対する自動テストの導入が今後の課題になります。新しい層・概念を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従ってこのドキュメント群を更新してください。
+現時点ではRead系（GET）・カード/ボードの新規登録（POST）に加え、カードの編集・ステータス変更・アーカイブ（PUT/PATCH、[33〜38章](./10-update-api.md)）が実装済みです。カードの完全削除、ボードの改名・削除・並べ替えといった残りのWrite系API（DELETE等）や、独自ロジックに対する自動テストの導入が今後の課題になります。新しい層・概念を実装した際は、[README.mdの更新ルール](./README.md#このドキュメントの更新ルール)に従ってこのドキュメント群を更新してください。

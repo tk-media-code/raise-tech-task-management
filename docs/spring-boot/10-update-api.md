@@ -180,7 +180,71 @@ card.setStatus(newStatus);
 .allowedMethods("GET", "POST", "PUT", "PATCH")
 ```
 
-DELETE（アーカイブ・削除機能）はまだ実装していないため、引き続きここには加えていません。「このAPIに今どんな操作ができるか」を`allowedMethods`という1行の正直な写しに保つという、POST追加時と変わらない方針です。この行を更新し忘れると、`update`・`updateStatus`自体はバックエンド単体では正しく動いていても、ブラウザ（フロントエンド）からのPUT/PATCHリクエストだけがCORSエラーで拒否されるという、`curl`では再現できずブラウザのDevToolsでしか気づけない不具合になります。
+DELETE（完全削除機能）はまだ実装していないため、引き続きここには加えていません（アーカイブは後述のとおりPATCHで実装したため、この行の更新は不要でした）。「このAPIに今どんな操作ができるか」を`allowedMethods`という1行の正直な写しに保つという、POST追加時と変わらない方針です。この行を更新し忘れると、`update`・`updateStatus`自体はバックエンド単体では正しく動いていても、ブラウザ（フロントエンド）からのPUT/PATCHリクエストだけがCORSエラーで拒否されるという、`curl`では再現できずブラウザのDevToolsでしか気づけない不具合になります。
+
+---
+
+## 38. アーカイブ：フラグ更新と冪等性
+
+要件定義5.7「完了したカードを削除せずに退避する」は、`status`に4つ目の値（例えば`"archived"`）を追加するのではなく、`Card`が最初から持っていた`isArchived`という**独立したboolean列**で表現します。
+
+```java
+@PatchMapping("/{id}/archive")
+public CardResponse updateArchived(@PathVariable Integer id, @Valid @RequestBody CardArchiveUpdateRequest request) {
+	return cardService.updateArchived(id, request);
+}
+```
+
+### なぜ`status`の4値目にしなかったのか
+
+`status`に`"archived"`を追加する設計も一見成立しそうですが、そうすると「アーカイブされている間、元々どの列にいたか」という情報が失われます。要件5.7は「アーカイブ一覧から、カードを**元のステータスへ**『復元』できる」と定めており、元の列を覚えておく必要があります。`isArchived`を`status`とは別の軸にしておけば、アーカイブ中も`status`列の値（`todo`/`doing`/`done`）をそのまま保持でき、復元時は`isArchived`をfalseに戻すだけで元の列に戻せます。[36章](#36-ステータス変更と列内の並び替え)で見た`ALLOWED_STATUSES`やDBの`@Check`制約（3値固定）に一切手を入れずに済むのも、この設計を選んだ利点です。
+
+### アーカイブ可能な条件を検証する
+
+要件定義5.7は「完了したカードを削除せずに退避する」機能として、アーカイブできる対象を「完了」列のカードだけに限定しています。この制約は`CardArchiveUpdateRequest`のBean Validationでは表現できません（`archived`は単なる`Boolean`であり、対象カードの`status`と組み合わせて判断する必要があるため）。[32章](./09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)のラベル色チェックと同じく、Service層で明示的に検証します。
+
+```java
+if (archived) {
+	if (!"done".equals(card.getStatus())) {
+		throw new InvalidRequestException("完了ステータスのカードのみアーカイブできます");
+	}
+	card.setIsArchived(true);
+} else {
+	// ...復元処理...
+}
+```
+
+この`if`が`archived`（＝アーカイブする方向）のときにしか出てこないのは、復元（`archived == false`）には対応する制約が無いためです。アーカイブ処理が`status`を一切変更しない（前節参照）ことにより、アーカイブされているカードの`status`は必ず`"done"`のまま保たれます。したがって「アーカイブされているカードを復元してよいか」を判定するための追加チェックはそもそも不要で、復元は常に許可されます。
+
+フロントエンド（`components/CardDetailModal.tsx`）側でも同じ条件でボタンを`disabled`にしていますが、これはサーバーへの無駄なリクエストを防ぐための先回りに過ぎず、実際の業務ルールの検証はこのService層が最終的な砦です。フォームの`disabled`→Bean Validation→アプリ層チェックという多層防御の考え方は[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)と同じです。
+
+### 状態遷移の冪等性
+
+`updateStatus`（36章）は、指定された`status`が3値のいずれでもなければ400エラーを返しました。一方`updateArchived`のリクエストDTOは`Boolean`1つだけで、`true`/`false`以外の値を送ること自体がJSONのレベルであり得ないため、「値として不正」というエラーは発生しません。代わりに考慮したのが、**既に同じ状態への変更が重複して届いたときの振る舞い**です。
+
+```java
+if (card.getIsArchived().equals(archived)) {
+	return toResponses(List.of(card)).get(0);
+}
+```
+
+カード詳細モーダルの「アーカイブ」ボタンを連打したり、ネットワークの再送で同じリクエストが2回届いたりしても、2回目以降は何も変更せず現在の状態をそのまま200で返します。「既にアーカイブ済みのカードをもう一度アーカイブする」ことをエラーとして扱わないのは、このAPIが「アーカイブする/しないを指定する」という**結果指向**の操作であり、「まだアーカイブされていないカードだけを対象にした手続き」ではないためです。この考え方はHTTPのPUT/PATCHが一般に持つ「同じリクエストを何度送っても結果が変わらない」という冪等性の性質にも合致します。
+
+### 復元時だけpositionを採番し直す理由
+
+```java
+} else {
+	Integer boardId = card.getBoard().getId();
+	card.setPosition(cardRepository.findMaxPosition(boardId, card.getStatus()) + 1);
+	card.setIsArchived(false);
+}
+```
+
+アーカイブする側（`true`にする側）は`status`・`position`のどちらにも触れません。[36章](#36-ステータス変更と列内の並び替え)の「移動元の列は詰め直さない」という判断と同じく、抜けた列に欠番ができてもその列を次に並べ替えたときに自然と解消されるためです。
+
+一方、復元する側（`false`に戻す側）は`position`を`findMaxPosition(boardId, status) + 1`で**採番し直します**。アーカイブされている間に元の列が並べ替えられていると、保持していたposition値が既に他のカードに使われてしまっている可能性があるためです（保持したままにすると、同じ列に同じposition値を持つカードが2枚できてしまいます）。[31章](./09-write-api-validation.md#31-登録処理の中身)で見た`create`の採番と同じ式を使っているのはこのためで、`findMaxPosition`がアーカイブ済みカードも母集団に含めている（[36章](#36-ステータス変更と列内の並び替え)末尾の対比を参照）ことも、この計算が正しく機能する前提になっています。結果として、復元されたカードは元にいた場所ではなく、常にその列の**末尾**に置かれます。要件5.7が求めているのは「元のステータス列に戻ること」であり、列内の元の位置までの厳密な復元は求めていないため、これで受け入れ条件を満たします。
+
+📄 実装：`backend/.../controller/CardController.java`の`updateArchived`、`backend/.../service/CardService.java`の`updateArchived`
 
 ---
 

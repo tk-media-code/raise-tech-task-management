@@ -1,5 +1,6 @@
 package com.tkmedia.taskmanagement.service;
 
+import com.tkmedia.taskmanagement.dto.CardArchiveUpdateRequest;
 import com.tkmedia.taskmanagement.dto.CardCreateRequest;
 import com.tkmedia.taskmanagement.dto.CardResponse;
 import com.tkmedia.taskmanagement.dto.CardSearchCondition;
@@ -338,6 +339,61 @@ public class CardService {
 		// 次にその列で並べ替えが発生すれば、このメソッドが列全体を振り直すため、欠番は自然に解消される。
 
 		// --- 6. レスポンスDTOへの変換 ---
+		return toResponses(List.of(card)).get(0);
+	}
+
+	/**
+	 * カードのアーカイブ状態を変更する（アーカイブする／元へ「復元」する、両方をこのメソッドで扱う。
+	 * 要件定義5.7）。
+	 *
+	 * @param id      対象カードのID
+	 * @param request 変更後のアーカイブ状態
+	 * @return 更新後のカードのDTO
+	 * @throws ResourceNotFoundException 該当カードが存在しない場合
+	 */
+	@Transactional
+	public CardResponse updateArchived(Integer id, CardArchiveUpdateRequest request) {
+		// --- 1. カードの取得 ---
+		Card card = cardRepository.findByIdWithBoard(id)
+				.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
+
+		boolean archived = request.archived();
+
+		// --- 2. 冪等性の確保 ---
+		// 既に同じ状態であれば何もせずそのまま返す。カード詳細モーダルの「アーカイブ」ボタンの
+		// 連打・ネットワーク再送のように、同じリクエストが重複して届いても400等のエラーにはせず、
+		// 「結果として意図した状態になっていればよい」という部分更新APIらしい振る舞いにするため。
+		if (card.getIsArchived().equals(archived)) {
+			return toResponses(List.of(card)).get(0);
+		}
+
+		if (archived) {
+			// --- 3a. アーカイブする ---
+			// 「完了」列のカードのみアーカイブ対象とする（プロトタイプprototype/app.jsの
+			// archiveCardと同じ業務ルール）。作業中・未着手のタスクを誤って退避してしまう事故を防ぐため、
+			// Bean Validationでは表現できないこの制約をここでチェックする
+			// （32章のラベル色チェックと同じ「業務ルールの検証はService層」という方針）。
+			if (!"done".equals(card.getStatus())) {
+				throw new InvalidRequestException("完了ステータスのカードのみアーカイブできます");
+			}
+			// statusとpositionはあえて変更しない。要件定義5.7「元のステータスへ復元できる」を
+			// 満たすため、アーカイブ中も「どの列の何番目にいたか」という情報をそのまま保持しておく。
+			// 元の列（例：done）には欠番ができるが、updateStatusが移動元列を詰め直さないのと同じ理由で
+			// 許容する（次にその列が並べ替えられれば自然に解消される）。
+			card.setIsArchived(true);
+		} else {
+			// --- 3b. 復元する ---
+			// アーカイブされている間に元の列（board×status）が並べ替えられている可能性があり、
+			// 保持していたpositionの値が他のカードと衝突するかもしれない。そのため、復元時は
+			// createと同じ「その時点の最大position+1」を採番し直し、列の末尾へ置く
+			// （要件定義5.7は「元のステータス列に戻る」とだけ定めており、元の並び順の完全な復元までは
+			// 求めていない）。
+			Integer boardId = card.getBoard().getId();
+			card.setPosition(cardRepository.findMaxPosition(boardId, card.getStatus()) + 1);
+			card.setIsArchived(false);
+		}
+
+		// --- 4. レスポンスDTOへの変換 ---
 		return toResponses(List.of(card)).get(0);
 	}
 

@@ -26,7 +26,7 @@
 | 24〜25章 | N+1問題とパフォーマンス | [07-jpa-performance.md](./07-jpa-performance.md) |
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
 | 28〜32章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
-| 33〜37章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
+| 33〜38章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
 
 ## 目次
 
@@ -67,6 +67,7 @@
 35. [コレクションの差し替え——ラベルの全削除＋再作成](./10-update-api.md#35-コレクションの差し替えラベルの全削除再作成)
 36. [ステータス変更と列内の並び替え](./10-update-api.md#36-ステータス変更と列内の並び替え)
 37. [CORSへの追記](./10-update-api.md#37-corsへの追記)
+38. [アーカイブ：フラグ更新と冪等性](./10-update-api.md#38-アーカイブフラグ更新と冪等性)
 
 ---
 
@@ -363,6 +364,14 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新する必要があることを解説します。
 
 📄 詳細：[10-update-api.md](./10-update-api.md#37-corsへの追記)
+
+---
+
+## 38. アーカイブ：フラグ更新と冪等性
+
+要件定義5.7のアーカイブ機能を、`status`の4値目としてではなく独立した`isArchived`フラグで表現する設計理由、「完了」列のカードのみアーカイブ可能というBean Validationでは表現できない制約をService層で検証する方法、`PATCH /api/cards/{id}/archive`が「同じ状態への変更が重複しても200を返す」という冪等性を持つ理由、復元時にpositionを採番し直す理由を解説します。
+
+📄 詳細：[10-update-api.md](./10-update-api.md#38-アーカイブフラグ更新と冪等性)
 
 ---
 
