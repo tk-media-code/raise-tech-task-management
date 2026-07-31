@@ -14,6 +14,8 @@ type Props = {
   onSelect: (cardId: number) => void
   /** 「移動」メニューでステータス変更に成功したとき（一覧の再取得を親に依頼するため）に呼ばれる */
   onMoved: () => void
+  /** ドラッグ中、このカードの直前に挿入されようとしているときtrue（SortableCardList参照） */
+  showDropLine: boolean
 }
 
 /**
@@ -35,13 +37,14 @@ type Props = {
  * CrossBoardViewの両方でしか使われていない（検索結果はSearchResultItemという別コンポーネント）
  * ことを前提にしている。
  */
-function CardItem({ card, onSelect, onMoved }: Props) {
+function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.id })
 
   // ステータス変更（要件5.3）。ドラッグ＆ドロップが主な操作導線だが、要件5.3は
   // 「スマートフォン・タブレット表示では、ドラッグ＆ドロップに加え…明示的な操作手段を提供する」
-  // としている。ここでは画面幅による出し分けはせず常時表示にしている
-  // （デスクトップでの利用を妨げないうえ、ドラッグ操作に不慣れな利用者の代替手段にもなるため）。
+  // としている。プロトタイプ（prototype/styles.css の.card-move-btn）に合わせ、PC幅では
+  // 出さずスマートフォン幅（768px未満）限定で表示する（下のclassNameのmd:hidden参照）。
+  // PCでの代替手段は、ドラッグ＆ドロップに加えてカード詳細モーダルの「ステータス」欄がある。
   const { mutate: changeStatus, submitting } = useMutation<CardStatusUpdateRequest, CardResponse>(
     'PATCH',
     apiPaths.updateCardStatus(card.id),
@@ -75,9 +78,19 @@ function CardItem({ card, onSelect, onMoved }: Props) {
       {...listeners}
       // ドラッグ中の元位置は半透明にする（実際に指に追従する見た目はCardDragPreview＝
       // <DragOverlay>が担うため、元の位置は「ここから動かしている最中」と分かる程度の
-      // 表示で十分）。
-      className={`w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-slate-300 hover:shadow ${isDragging ? 'opacity-40' : ''}`}
+      // 表示で十分）。relativeは、下の挿入ライン（absolute配置）の基準位置にするため。
+      className={`relative w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-slate-300 hover:shadow ${isDragging ? 'opacity-40' : ''}`}
     >
+      {showDropLine && (
+        // ドラッグ中、このカードの直前に挿入されようとしていることを示すライン。
+        // absolute配置（inset-x-0 -top-2）にしているのは、カードの高さ自体は変えず、
+        // 親のgap-3（12px）の中央あたりに重ねて表示するため。カードの高さが変わると
+        // dnd-kitが実測しているrect（resolveDropTargetの判定に使う）とずれてしまう。
+        <div
+          className="pointer-events-none absolute inset-x-0 -top-2 z-10 h-1 rounded-full bg-blue-500"
+          aria-hidden="true"
+        />
+      )}
       <button
         type="button"
         onClick={() => onSelect(card.id)}
@@ -114,13 +127,15 @@ function CardItem({ card, onSelect, onMoved }: Props) {
           対策として過不足が無いため。
           value=""を常に指定し、選択後の値をstateに反映しない「使い切りの操作メニュー」
           にしている。ステータス変更が成功するとこのカード自体が元の列から消える
-          （親のgroupingで別の列に移る）ため、選択後の表示を気にする必要が無い。 */}
+          （親のgroupingで別の列に移る）ため、選択後の表示を気にする必要が無い。
+          md:hiddenは、Tailwindのレスポンシブ修飾子（768px以上を"md"として扱う）で
+          PC幅を非表示にする指定。768px未満（プロトタイプのブレークポイントと同じ）だけ表示する。 */}
       <select
         value=""
         onChange={handleMove}
         disabled={submitting}
         aria-label={`「${card.title}」の移動先`}
-        className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:opacity-50"
+        className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:opacity-50 md:hidden"
       >
         <option value="" disabled>
           移動 ▾

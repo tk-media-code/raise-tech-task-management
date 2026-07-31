@@ -25,7 +25,7 @@
 | 15章 | コンポーネント設計と状態の持ち方 | [06-component-design.md](./06-component-design.md) |
 | 16〜17章 | npm・Viteとビルド周りの設定 | [07-build-tooling.md](./07-build-tooling.md) |
 | 18〜21章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
-| 22〜26章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
+| 22〜27章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
 
 ## 目次
 
@@ -55,6 +55,7 @@
 24. [センサーと`activationConstraint`](./09-editing-and-drag-and-drop.md#24-センサーとactivationconstraint)
 25. [ドラッグ＆ドロップだけの楽観的更新](./09-editing-and-drag-and-drop.md#25-ドラッグドロップだけの楽観的更新)
 26. [`DragOverlay`と見た目のコピー](./09-editing-and-drag-and-drop.md#26-dragoverlayと見た目のコピー)
+27. [挿入位置の可視化](./09-editing-and-drag-and-drop.md#27-挿入位置の可視化)
 
 ---
 
@@ -188,7 +189,7 @@
 
 ## 17. Tailwind CSSの読み方
 
-ユーティリティファーストという考え方と、`StatusMessage.tsx`が明示している「クラス名を文字列連結で組み立ててはいけない」という重要な制約、Tailwindで表現できない値を`style`属性で扱う使い分けを解説します。
+ユーティリティファーストという考え方と、`StatusMessage.tsx`が明示している「クラス名を文字列連結で組み立ててはいけない」という重要な制約、Tailwindで表現できない値を`style`属性で扱う使い分け、`md:`のようなブレークポイント修飾子によるレスポンシブ対応を解説します。
 
 📄 詳細：[07-build-tooling.md](./07-build-tooling.md#17-tailwind-cssの読み方)
 
@@ -266,6 +267,14 @@
 
 ---
 
+## 27. 挿入位置の可視化
+
+ドラッグ中に挿入位置をラインで示すための`collisionDetection`のカスタマイズ（`pointerWithin`優先＋`closestCenter`フォールバック）、`onDragMove`と`onDragOver`の使い分け、`onDragCancel`、挿入位置の判定を1つの純粋関数にまとめてプレビューと確定処理を一致させる設計を解説します。
+
+📄 詳細：[09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md#27-挿入位置の可視化)
+
+---
+
 ## 付録：このドキュメントで扱っていないReactの機能
 
 Reactの入門書には載っているのに、本プロジェクトのコードには一度も登場しない機能があります。「知らないのは自分だけでは」と迷わないよう、意図的に扱っていない機能と、その理由をまとめておきます。
@@ -277,7 +286,7 @@ Reactの入門書には載っているのに、本プロジェクトのコード
 | `React.memo`（コンポーネントの再描画抑制） | 再描画コストが問題になるほど重いコンポーネントがまだ無い |
 | エラーバウンダリ | 現状のエラー処理はAPI通信の失敗（[11章](#11-データ取得の3状態とレースコンディション)のstate）に限られ、予期しない描画エラー自体を捕捉する仕組みは未導入 |
 
-`useCallback`（[19章](#19-書き込みpostとデータの更新)の`useApi.refetch`・`useMutation.mutate`）・`useRef`（[20章](#20-userefとdomへの直接アクセス)）は、カード・ボードの新規作成の実装にあわせて登場したため、このリストから外れました。ドラッグ＆ドロップも、カードの更新機能（要件5.3）の実装により[23〜26章](./09-editing-and-drag-and-drop.md)で扱うようになったため、このリストから外れています。残る機能も、Write系API（DELETE等）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
+`useCallback`（[19章](#19-書き込みpostとデータの更新)の`useApi.refetch`・`useMutation.mutate`）・`useRef`（[20章](#20-userefとdomへの直接アクセス)）は、カード・ボードの新規作成の実装にあわせて登場したため、このリストから外れました。ドラッグ＆ドロップも、カードの更新機能（要件5.3）の実装により[23〜27章](./09-editing-and-drag-and-drop.md)で扱うようになったため、このリストから外れています。残る機能も、Write系API（DELETE等）の実装が進むにつれて登場する可能性があります。実装に登場した時点で、下記の更新ルールに従ってこのドキュメント群に章を追加してください。
 
 ## このドキュメントの更新ルール
 

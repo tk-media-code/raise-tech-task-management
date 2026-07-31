@@ -164,3 +164,15 @@ style={{ backgroundColor: label.color, color: getContrastTextColor(label.color) 
 ```
 
 これも今回の制約と同じ理由です。ラベルの色はデータベースに保存された任意の16進カラーコード（`#e74c3c`など）であり、Tailwindの決まったクラス名の集合には存在しません。ビルド時に静的に決まらない「実行時にしか分からない値」は、Tailwindのユーティリティクラスではなく、素のCSSと同じ`style`属性で直接指定する、という使い分けになります。
+
+### レスポンシブ修飾子（`md:`など）
+
+`components/CardItem.tsx`の「移動 ▾」`<select>`は、次のように`md:hidden`というクラスを持っています。
+
+```typescript
+className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:opacity-50 md:hidden"
+```
+
+Tailwindは`md:`のような**ブレークポイント修飾子**をクラス名の前に付けることで、「画面幅がある条件を満たすときだけ」そのユーティリティを適用できます。既定のブレークポイントはいくつか用意されていますが、本プロジェクトで使っているのは`md`（`min-width: 768px`）だけです。`md:hidden`は「768px以上の画面幅では`display: none`にする」という意味で、逆に言えば768px未満（スマートフォン幅）でだけ表示される、ということになります。
+
+修飾子の付いていない素の`hidden`のようなクラスは常時（全ての画面幅で）適用されるため、`md:hidden`のように修飾子付きのクラスと組み合わせて初めて「ある画面幅**未満**でだけ表示する」という指定になります。逆に「768px以上でだけ表示する」なら、既定で`hidden`を指定したうえで`md:block`（や`md:flex`など、要素本来の`display`値）を付け足す、という書き方をします。`components/BoardDetailView.tsx`・`CrossBoardView.tsx`の`grid gap-4 md:grid-cols-3`（3列カンバンを768px未満では1列に、768px以上では3列にする）も同じ修飾子の仕組みで、こちらは既存のCSS（メディアクエリ）で言う`@media (min-width: 768px) { ... }`にちょうど対応します。

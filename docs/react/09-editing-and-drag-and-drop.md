@@ -84,15 +84,20 @@ onUpdated() // 呼び出し元（CrossBoardView・BoardDetailView・SearchView�
 `components/SortableCardList.tsx`は、`useDroppable`と`SortableContext`の**両方**を使います。
 
 ```tsx
-function SortableCardList({ id, cards, onSelect, onMoved, emptyHint }: Props) {
+function SortableCardList({ id, cards, onSelect, onMoved, emptyHint, dropIndicator }: Props) {
   const { setNodeRef } = useDroppable({ id })
+  const indicator = dropIndicator?.columnId === id ? dropIndicator : null
+  const showEmptyIndicator = indicator !== null && indicator.beforeCardId === null
 
   return (
-    <div ref={setNodeRef} className="flex min-h-8 flex-col gap-3">
-      <SortableContext id={id} items={cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
+    <div
+      ref={setNodeRef}
+      className={`flex min-h-8 flex-col gap-3 rounded-lg ${showEmptyIndicator ? 'outline-2 -outline-offset-2 outline-dashed outline-blue-500' : ''}`}
+    >
+      <SortableContext id={id} items={cards.map((card) => card.id)} strategy={noSorting}>
         {cards.length === 0 ? emptyHint : null}
         {cards.map((card) => (
-          <CardItem key={card.id} card={card} onSelect={onSelect} onMoved={onMoved} />
+          <CardItem key={card.id} card={card} onSelect={onSelect} onMoved={onMoved} showDropLine={indicator?.beforeCardId === card.id} />
         ))}
       </SortableContext>
     </div>
@@ -103,6 +108,8 @@ function SortableCardList({ id, cards, onSelect, onMoved, emptyHint }: Props) {
 `useDroppable`が担うのは「カードが1枚も無い列」「列内の最後のカードより下の余白」へドロップされたケースです。`SortableContext`だけでは、カードが1枚も無い列にはそもそも「並べ替え対象のID」が1つも無いため、空の列へドロップする操作を検出できません。列自体を表す`useDroppable`をあわせて登録することで、空の列でもドロップ可能な領域として機能します。
 
 `min-h-8`というTailwindクラスを`SortableCardList`の外枠に必ず与えているのも、この「空の列へのドロップ」を成立させるためです。高さ0の要素は、dnd-kitの当たり判定（重なり検出）が実質的に機能せず、ドロップ操作自体が成立しません。
+
+`strategy`に渡している`noSorting`（`() => null`を返すだけの自作の`SortingStrategy`）は、dnd-kit標準の`verticalListSortingStrategy`をあえて使わない選択です。理由は[27章](#27-挿入位置の可視化)で扱います。
 
 ### `CardItem`自身がドラッグ対象になる
 
@@ -154,7 +161,7 @@ const sensors = useSensors(
 
 要件5.3は「スマートフォン・タブレットでのタッチ操作によるドラッグ＆ドロップにも対応する」ことを明記しています。`TouchSensor`を単に追加するだけでなく、`delay`を設けているのは、指でスワイプして**画面をスクロールしたいだけの操作**と、カードを**ドラッグして移動したい操作**を区別するためです。`delay`が無ければ、カード一覧を指でスクロールしようとするたびにドラッグが始まってしまい、スクロール自体ができなくなります。
 
-要件5.3はこれに加え、「カードの『移動』ボタンや『…』メニューから選べる明示的な操作手段」も求めています。`CardItem`の「移動 ▾」セレクト（[22章](#22-カード詳細モーダルを編集可能にする)のステータス`<select>`と同じ考え方）が、この明示的な操作手段にあたります。
+要件5.3はこれに加え、「カードの『移動』ボタンや『…』メニューから選べる明示的な操作手段」も求めています。`CardItem`の「移動 ▾」セレクト（[22章](#22-カード詳細モーダルを編集可能にする)のステータス`<select>`と同じ考え方）が、この明示的な操作手段にあたります。この`<select>`は`className`に`md:hidden`（[07-build-tooling.md 17章](./07-build-tooling.md#17-tailwind-cssの読み方)のレスポンシブ修飾子）を付け、768px未満のスマートフォン幅でのみ表示しています。768px以上ではドラッグ＆ドロップと、カード詳細モーダルの「ステータス」欄という2つの手段が既にあり、`<select>`は不要になるためです。
 
 ---
 
@@ -225,6 +232,96 @@ function handleDragStart(event: DragStartEvent) {
 ```
 
 `<DndContext>`の`onDragStart`で、ドラッグが始まったカードのIDから実体（`CardResponse`）を探して`activeCard`にセットします。`onDragEnd`（ドロップ時）では、成否によらず`setActiveCard(null)`を最初に呼び、オーバーレイを消します。これらの状態は[25章](#25-ドラッグドロップだけの楽観的更新)の楽観的更新と同じ`useCardDragAndDrop`フックの中で管理されており、呼び出し側の`BoardDetailView`・`CrossBoardView`は`dragAndDrop.activeCard`を`<DragOverlay>`へそのまま渡すだけで済みます。
+
+---
+
+## 27. 挿入位置の可視化
+
+23章までの実装は、カードをどこへドロップしても「重なった相手カードの手前」に挿入する、という簡略化した割り切りでした。ドラッグ中に挿入位置を示す表示も無く、指を離すまでカードがどこに収まるか分かりづらいという課題がありました。この章では、その挿入位置を**ドラッグ中に線で示し、指を離した位置と一致させる**ための3つの工夫を扱います。
+
+### `collisionDetection`のカスタマイズ
+
+dnd-kitは「ドラッグ中のカードが今どのドロップ領域の上にあるか」を`collisionDetection`関数で判定します。既定でよく使われる`closestCenter`は、**全ドロップ領域の中心との距離**で最も近いものを選びます。これは、列全体を覆う`useDroppable`（[23章](#23-dnd-kitの構成要素)）の中心が個々のカードの中心より近くなる場面があり、カードとカードの間にポインタがあっても「列そのもの（＝末尾）」と判定されてしまう問題を引き起こしていました。
+
+```tsx
+export const cardCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args)
+  if (pointerCollisions.length > 0) {
+    const overCard = pointerCollisions.find((collision) => typeof collision.id === 'number')
+    return overCard === undefined ? pointerCollisions : [overCard]
+  }
+  return closestCenter(args)
+}
+```
+
+`pointerWithin`は、`closestCenter`と違い**ポインタが実際に重なっている領域**を返します。カードは列の`useDroppable`の内側にあるため、ポインタがカードの上にあると列・カード両方がヒットします。sortable idの型（カードは`card.id`という`number`、列は`columnId()`が組み立てる`string`）でどちらか見分け、より具体的なカード側を優先しています。`pointerWithin`は座標（`pointerCoordinates`）が無いと何も返せないため、`KeyboardSensor`によるキーボード操作時は空配列になります。その場合だけ`closestCenter`にフォールバックすることで、マウス・タッチ操作は正確な当たり判定、キーボード操作は引き続き動作する、という両立を実現しています。この関数は`<DndContext collisionDetection={cardCollisionDetection}>`として渡します。
+
+### 挿入位置を1つの純粋関数にまとめる
+
+「今どこに挿入されようとしているか」の計算（`resolveDropTarget`）を、`hooks/useCardDragAndDrop.ts`内の**purely関数**（React stateに触れない、`event`と現在のカード一覧だけから結果を求める関数）として独立させています。
+
+```tsx
+function resolveDropTarget(event: DragMoveEvent, source: CardResponse[]): DropTarget | null {
+  // ...over.idから移動先の列を求め、destinationCards（対象カードを除いた列の並び）の中で
+  // 挿入位置(insertIndex)を求める...
+}
+```
+
+この関数を、ドラッグ中の**プレビュー**（後述の`handleDragMove`）と、指を離した瞬間の**確定処理**（`handleDragEnd`）の**両方**から呼びます。同じ入力に対して常に同じ結果を返す関数を1箇所にまとめることで、「ラインが示していた位置」と「実際にカードが収まる位置」が食い違う心配がなくなります。`handleDragEnd`は次のように、直前の`handleDragMove`が計算した結果（`dropTarget`という state）を優先し、無ければ改めて同じ関数を呼びます。
+
+```tsx
+const destination = dropTarget ?? resolveDropTarget(event, source)
+```
+
+挿入位置が「相手カードの手前」か「後ろ」かは、ドラッグ中のカードの実測矩形（`event.active.rect.current.translated`）の中心Y座標と、重なった相手カード（`event.over.rect`）の中心Y座標を比較して決めています。`onDragMove`・`onDragEnd`のイベントオブジェクトにはポインタの座標そのものは含まれていない（座標を持つのは`collisionDetection`に渡される引数だけ）ため、代わりにドラッグ中カード自身の位置を使っています。
+
+### `onDragMove`と`onDragOver`の違い
+
+挿入位置プレビューの更新には、`<SortableContext>`の並べ替えでよく使われる`onDragOver`ではなく`onDragMove`を使っています。
+
+```tsx
+<DndContext
+  collisionDetection={cardCollisionDetection}
+  onDragStart={dragAndDrop.handleDragStart}
+  onDragMove={dragAndDrop.handleDragMove}
+  onDragEnd={dragAndDrop.handleDragEnd}
+  onDragCancel={dragAndDrop.handleDragCancel}
+>
+```
+
+`onDragOver`は「`over`（重なっている対象）が変わったとき」だけ発火します。同じカードの上半分から下半分へポインタを動かしただけでは`over`（カードのid）自体は変わらないため、`onDragOver`はこの移動を検知できません。`onDragMove`はポインタが動くたびに発火するため、この「同じカードの中での手前/後ろの切り替え」も含めて`resolveDropTarget`を呼び直せます。
+
+高頻度に発火する分、`handleDragMove`では計算結果が実質的に変わっていなければ`setDropTarget`に同じstateの参照を返し、無駄な再レンダリングを避けています。
+
+```tsx
+setDropTarget((prev) => {
+  if (prev !== null && next !== null && /* ...prevとnextが同じ挿入位置... */) return prev
+  return next
+})
+```
+
+### `onDragCancel`
+
+Escapeキーでドラッグを中断すると、dnd-kitは`onDragEnd`ではなく`onDragCancel`を呼びます。
+
+```tsx
+function handleDragCancel() {
+  setActiveCard(null)
+  setDropTarget(null)
+}
+```
+
+これが無いと、キャンセルしたはずのドラッグの見た目（`<DragOverlay>`・挿入ライン）が残ったままになります。`onDragEnd`と同様に`<DndContext onDragCancel={...}>`へ接続するだけで済み、[26章](#26-dragoverlayと見た目のコピー)の`activeCard`と本章の`dropTarget`、両方の後片付けをここでまとめて行います。
+
+### `verticalListSortingStrategy`を使わない理由
+
+[23章](#23-dnd-kitの構成要素)で触れたとおり、`SortableContext`の`strategy`には`verticalListSortingStrategy`ではなく、常に`null`を返す自作の`noSorting`を渡しています。
+
+```tsx
+const noSorting: SortingStrategy = () => null
+```
+
+`verticalListSortingStrategy`は、ドラッグ中のカードが重なった位置に応じて**同じ列内の他のカードをCSS transformでずらす**（隙間を空ける）ためのストラテジーです。これは列**内**の並べ替えでは機能しますが、列**間**の移動では他の列のカードはずれないため、同じアプリの中で「列内は動く・列間は動かない」という一貫性のない見た目になってしまいます。本章の挿入ライン（`CardItem`の`showDropLine`）は、この「他のカードをずらす」演出に頼らず、ラインだけで挿入位置を示す設計です。他のカードを一切動かさないことで、`event.over.rect`（ドラッグ開始時点で測定された矩形）が常に正しく、`resolveDropTarget`の計算結果とずれる心配もありません。
 
 ---
 

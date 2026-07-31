@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
-import { closestCenter, DndContext, DragOverlay } from '@dnd-kit/core'
+import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
@@ -9,7 +9,7 @@ import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
-import { columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
+import { cardCollisionDetection, columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
 import { groupCardsByStatus } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
 import type { CardResponse } from '../types/api'
@@ -75,9 +75,11 @@ function BoardDetailView() {
     return (
       <DndContext
         sensors={dragAndDrop.sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={cardCollisionDetection}
         onDragStart={dragAndDrop.handleDragStart}
+        onDragMove={dragAndDrop.handleDragMove}
         onDragEnd={dragAndDrop.handleDragEnd}
+        onDragCancel={dragAndDrop.handleDragCancel}
       >
         <div className="grid gap-4 md:grid-cols-3">
           {STATUSES.map((status) => {
@@ -90,6 +92,7 @@ function BoardDetailView() {
                   onSelect={(cardId) => setSelectedCardId(cardId)}
                   onMoved={refetch}
                   emptyHint={<p className="text-xs text-slate-400">カードはまだありません</p>}
+                  dropIndicator={dragAndDrop.dropIndicator}
                 />
                 {/* 「＋ カードを追加」は未着手列の下にのみ置く（ワイヤーフレーム6.2①）。
                     新規作成されたカードは常にstatus=todoなので、置き場所もここ一択になる。 */}
