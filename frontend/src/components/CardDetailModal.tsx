@@ -4,7 +4,7 @@ import { apiPaths } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { useMutation } from '../hooks/useMutation'
 import { isCardStatus, STATUSES, STATUS_LABELS } from '../lib/status'
-import type { CardArchiveUpdateRequest, CardResponse, CardStatusUpdateRequest, CardUpdateRequest } from '../types/api'
+import type { CardArchiveUpdateRequest, CardResponse, CardStatus, CardStatusUpdateRequest, CardUpdateRequest } from '../types/api'
 import DueDateBadge from './DueDateBadge'
 import LabelPicker from './LabelPicker'
 import StatusMessage from './StatusMessage'
@@ -14,7 +14,7 @@ type Props = {
   cardId: number | null
   /** 保存・ステータス変更に成功したとき（一覧の再取得を親に依頼するため）に呼ばれる */
   onUpdated: () => void
-  /** モーダルを閉じるとき（× ／背景クリック／Escape）に呼ばれる */
+  /** モーダルを閉じるとき（× ／背景クリック／Escape／保存やアーカイブの完了）に呼ばれる */
   onClose: () => void
 }
 
@@ -24,13 +24,22 @@ type Props = {
  * ラベルを追加/変更できる」に対応する。フッターの「アーカイブ」／「復元」ボタンは要件5.7に対応する
  * （削除はまだ書き込みAPI（DELETE等）が未実装のため、引き続きボタン自体を置いていない）。
  *
- * タイトル・説明・期日・ラベルは「保存」ボタンを押すまでサーバーへ送らない
- * （CardCreateFormと同じ、ドラフトを溜めてから確定するフォーム）。一方ステータスだけは
- * <select>を変更した瞬間にPATCHを送る。この非対称は要件5.3の設計そのもの
- * （ステータス変更はドラッグ＆ドロップ等の「即座に切り替わる」操作の一つであり、
- * 他の項目のように「保存」を挟む編集操作ではない）を反映している。そのためstatusだけは
- * 他の項目のようなローカルの下書きstateを持たず、<select value={card.status}>のように
- * 取得したcardの値へ直接紐づけている（PATCH成功後のrefetchで新しい値に置き換わる）。
+ * タイトル・ステータス・説明・期日・ラベルの5項目とも「保存」ボタンを押すまでサーバーへ
+ * 送らない（CardCreateFormと同じ、ドラフトを溜めてから確定するフォーム）。以前はステータスだけ
+ * <select>を変更した瞬間にPATCHを送る特別扱いだったが、1つのフォームの中に「即座に確定する
+ * 項目」と「保存待ちの項目」が混在すると「保存」の対象範囲が曖昧になるため、他の4項目と
+ * 同じ下書きに統一した。
+ *
+ * サーバー側のAPIは従来どおり2本のまま（PUT /api/cards/{id} と PATCH /api/cards/{id}/status。
+ * CardUpdateRequestにstatusフィールドを持たせていないのは「ボード間移動はスコープ外、
+ * ステータス変更は別APIの責務」という設計のため）。「保存」を押すとPUTを送り、成功かつ
+ * ステータスが変更されている場合に限ってPATCHも続けて送る（handleSubmit参照。「変更されて
+ * いる場合に限って」は正しさの条件であり最適化ではない。理由はhandleSubmit内のコメント参照）。
+ *
+ * 要件5.3が求める「選んだ瞬間に即座に切り替わる」操作は、このモーダルではなく
+ * ドラッグ＆ドロップ（hooks/useCardDragAndDrop.ts）とスマートフォン限定の「移動▾」メニュー
+ * （CardItem.tsx）が引き続き担う。どちらもこのモーダルとは別のuseMutationインスタンス・
+ * 別のハンドラを持つ独立した呼び出し元であり、この変更の影響を受けない。
  *
  * 一覧（CrossBoardView・BoardDetailView・SearchView）が既に持っているカードの情報を使い回さず、
  * 開くたびに GET /api/cards/{id} を再取得している。理由は3つ:
@@ -61,6 +70,11 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [labelIds, setLabelIds] = useState<number[]>([])
+  // ステータスも他の4項目と同じ下書き。型引数<CardStatus>を明示しないと初期値'todo'から
+  // string型と推論され、後段のchangeStatus({ status })に渡せなくなる。初期値の'todo'は
+  // title=''・labelIds=[]と同じ意味のないプレースホルダーで、cardが届いた時点で
+  // 下のuseEffectが正しい値へ差し替える（フォーム自体もcard !== nullの間しか描画されない）。
+  const [status, setStatus] = useState<CardStatus>('todo')
 
   useEffect(() => {
     if (card === null) return
@@ -68,6 +82,7 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     setDescription(card.description ?? '')
     setDueDate(card.dueDate ?? '')
     setLabelIds(card.labels.map((label) => label.id))
+    setStatus(card.status)
     // 依存配列はcard（オブジェクト）自体。cardIdだけを見ていると、同じカードを開いたまま
     // 「保存」してcardが再取得された（＝新しいオブジェクトになった）ときにフォームへ
     // 反映し直されない。サーバー側の正規化後の値（titleのtrimなど）を表示に反映するためにも、
@@ -82,8 +97,10 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     cardId === null ? '' : apiPaths.card(cardId),
   )
 
-  // ステータス変更（PATCH）。位置（position）はここでは送らない＝常に移動先列の末尾へ置く。
-  // 列内の並び替えという細かい制御はドラッグ＆ドロップ側の役割で、このセレクトボックスは
+  // ステータス変更（PATCH）。<select>の変更時点では呼ばず、handleSubmitが「保存」時に
+  // 下書きstatusとcard.statusを比べて必要な場合だけ呼ぶ（このコンポーネントのdocblock参照）。
+  // 位置（position）はここでは送らない＝常に移動先列の末尾へ置く。列内の並び替えという
+  // 細かい制御はドラッグ＆ドロップ側の役割で、このセレクトボックスは
   // 「とりあえずステータスだけ動かす」簡易な手段として割り切っている。
   const {
     mutate: changeStatus,
@@ -131,11 +148,19 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
   if (cardId === null) return null
 
   const titleTrimmed = title.trim()
+  // 「保存」は最大2本のリクエスト（PUT→PATCH）を順に送るため、送信中かどうかは
+  // 両方のフラグを合わせて判断する。
+  const submitting = saving || changingStatus
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     // ブラウザ標準のフォーム送信（ページ全体のリロードを伴う）を止め、
     // 代わりにfetchによる非同期送信（useMutationのsave）に置き換える。
     event.preventDefault()
+
+    // cardがnullの間はこのフォーム自体が描画されない（下のJSXの{card !== null && ...}）ため
+    // 実際には必ず値が入っているが、TypeScriptはその絞り込みをこの関数の中まで
+    // 持ち込んでくれない（handleArchiveToggleと同じ理由の型ガード）。
+    if (card === null) return
 
     const updated = await save({
       title: titleTrimmed,
@@ -150,14 +175,39 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     // フォームの入力内容をそのまま残す。
     if (updated === null) return
 
-    // このモーダル自身のcard（useApi）を再取得しつつ、親（一覧を持つページ）にも
-    // 再取得を依頼する。要件5.4「横断ビュー上でカードを編集…すると、元のボード詳細画面にも
-    // 反映される」は、この2つのrefetchによって満たされる。
-    refetch()
+    // ステータスだけはPUTでは更新できない（types/api.ts CardUpdateRequestにstatusフィールドが
+    // 無い設計）ため、変更されている場合に限って専用のPATCHを続けて送る。
+    //
+    // 「変更されている場合に限って」は通信量の最適化ではなく正しさの条件である。このPATCHは
+    // positionを送らないため、バックエンド（CardService.updateStatus）は移動先列の末尾へ
+    // カードを置く。移動先が現在と同じ列でも同じ処理が走るので、無条件に送ると
+    // 「タイトルを直しただけの保存」でカードが自分の列の一番下へ動いてしまう。
+    if (status !== card.status) {
+      const statusUpdated = await changeStatus({ status })
+      if (statusUpdated === null) {
+        // ステータス変更だけ失敗。この時点でPUTは既に成功しているため、その分（タイトル・
+        // 説明・期日・ラベル）は呼び出し元の一覧・このモーダル自身の両方へ反映しつつ、
+        // モーダルは閉じずに開いたままにする。refetch()がサーバーの実際の状態（保存された
+        // title等・変更されなかったstatus）へ<select>を含む表示全体を揃え直し、statusErrorが
+        // その直下に表示されるので、ユーザーはそれを見て「保存」を押し直せる。
+        // 「全項目の保存に成功したときだけ閉じる」という下のonClose()の方針はここでも変わらない。
+        refetch()
+        onUpdated()
+        return
+      }
+    }
+
+    // ここへ到達するのは、タイトル等（PUT）と、変更されていればステータス（PATCH）の
+    // 両方の保存に成功した場合のみ。要件5.4「横断ビュー上でカードを編集…すると、元のボード
+    // 詳細画面にも反映される」を満たすため、呼び出し元（一覧を持つページ）には再取得を
+    // 依頼するが、このモーダル自身のcard（useApi）は再取得しない。直後のonClose()で
+    // このモーダル自体がアンマウントされ、取得結果を表示する機会が無いため
+    // （handleArchiveToggleがrefetch()を呼ばないのと同じ理由）。
     onUpdated()
+    onClose()
   }
 
-  async function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
+  function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
     const nextStatus = event.target.value
     // <select>のvalueは実行時にはただの文字列で、CardStatusであることをTypeScriptは
     // 保証してくれない（lib/status.tsのisCardStatusと同じ注意点）。ここでは
@@ -165,11 +215,8 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     // 型を通すための型ガードとして扱う。
     if (!isCardStatus(nextStatus)) return
 
-    const updated = await changeStatus({ status: nextStatus })
-    if (updated === null) return
-
-    refetch()
-    onUpdated()
+    // 他の項目と同じく、ここでは下書きを更新するだけ。サーバーへ送るのはhandleSubmit。
+    setStatus(nextStatus)
   }
 
   async function handleArchiveToggle() {
@@ -253,19 +300,27 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                 </label>
                 <select
                   id="card-detail-status"
-                  // 他の項目と違い、valueは下書きstateではなくcard.statusへ直接紐づける
-                  // （このコンポーネントのdocblock参照）。
-                  value={card.status}
+                  // 他の項目と同じく下書きstateに紐づける（このコンポーネントのdocblock参照）。
+                  value={status}
                   onChange={handleStatusChange}
-                  disabled={changingStatus}
+                  disabled={submitting}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
                 >
-                  {STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {STATUS_LABELS[status]}
+                  {/* mapの引数名をstatusにすると、上で定義した下書きstate変数のstatusを
+                      覆い隠して紛らわしいため、optionという別名にする（中身は同じくCardStatus）。 */}
+                  {STATUSES.map((option) => (
+                    <option key={option} value={option}>
+                      {STATUS_LABELS[option]}
                     </option>
                   ))}
                 </select>
+                {/* PATCH失敗直後のrefetch()で下書きstatusはサーバーの値へ戻る。そのため
+                    「失敗したままステータスに触れず他の項目だけ直して再保存した」場合、
+                    上のガード（handleSubmit内のstatus !== card.status）によりPATCHが再送されず、
+                    このエラーは次にchangeStatusが呼ばれるまで残り続ける（useMutationのerrorは
+                    次のmutate開始時にしかクリアされない。hooks/useMutation.ts参照）。表示中の
+                    <select>の値自体は常に正しいため実害は「古いエラー文が残る」ことだけであり、
+                    この程度でuseMutationへリセット手段を足すことはしない。 */}
                 {statusError !== null && (
                   <StatusMessage kind="error">{statusError.message}</StatusMessage>
                 )}
@@ -315,11 +370,11 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                 <button
                   type="submit"
                   // 要件5.2と同じ「タイトルが未入力の間は押せない」という考え方をここにも適用する。
-                  disabled={titleTrimmed === '' || saving}
+                  disabled={titleTrimmed === '' || submitting}
                   title={titleTrimmed === '' ? 'タイトルを入力してください' : undefined}
                   className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                 >
-                  {saving ? '保存中…' : '保存'}
+                  {submitting ? '保存中…' : '保存'}
                 </button>
               </div>
             </form>
@@ -337,10 +392,19 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
               // populateCardModalと同じ業務ルール。バックエンドCardService.updateArchivedも
               // 同じ制約を検証しており、ここでの無効化はサーバーへの無駄なリクエストを防ぐための
               // 先回りに過ぎない）。復元（isArchived=trueから戻す）にはこの制約が無い。
+              // disabledの判定はcard.status（サーバーに永続化されている値）で行う。アーカイブは
+              // 「保存」を経由しない独立した即時操作であり、バックエンドも永続化された値しか
+              // 見ないため、活性・非活性はドラフトではなくサーバー側の実際の値に合わせる。
               disabled={archiving || (!card.isArchived && card.status !== 'done')}
               title={
                 !card.isArchived && card.status !== 'done'
-                  ? '完了ステータスのカードのみアーカイブできます'
+                  ? // ただしツールチップの文言だけはドラフトのstatusも見る。そうしないと、
+                    // <select>で「完了」を選んだ直後（まだ保存前）もボタンは無効のままなのに
+                    // 「完了ステータスのカードのみアーカイブできます」という、選んだ内容と
+                    // 矛盾する文言が出続けてしまう。
+                    status === 'done'
+                    ? 'ステータスの変更を「保存」してからアーカイブできます'
+                    : '完了ステータスのカードのみアーカイブできます'
                   : undefined
               }
               className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
