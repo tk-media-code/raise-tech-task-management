@@ -71,9 +71,11 @@ function App() {
           </Link>
           {/* 📥 アーカイブ（要件5.7）。ワイヤーフレーム6.2では①ボード詳細・③横断ビューの
               両方から開ける導線として描かれているが、🔍検索と同じ理由でヘッダー
-              （<Routes>の外側）に1つ置けば両画面から開けるため、個別に配置し直さない。 */}
+              （<Routes>の外側）に1つ置けば両画面から開けるため、個別に配置し直さない。
+              stateの渡し方も🔍検索と同じ（pages/ArchiveView.tsxの「← 戻る」が使う）。 */}
           <Link
             to="/archive"
+            state={{ from: `${location.pathname}${location.search}` }}
             title="アーカイブ"
             aria-label="アーカイブ"
             className="rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
