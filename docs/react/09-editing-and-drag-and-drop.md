@@ -58,22 +58,29 @@ const updated = await save({ title: titleTrimmed, description, dueDate, labelIds
 if (updated === null) return
 
 if (status !== card.status) {
-  await changeStatus({ status })
+  const statusUpdated = await changeStatus({ status })
+  if (statusUpdated === null) {
+    refetch()
+    onUpdated()
+    return
+  }
 }
 
-refetch()
 onUpdated()
+onClose()
 ```
 
 **`status !== card.status`のガードは最適化ではなく正しさの条件です。** `PATCH /api/cards/{id}/status`は`position`を省略すると、バックエンド（`CardService.updateStatus`、[docs/spring-boot 36章](../spring-boot/10-update-api.md#36-ステータス変更と列内の並び替え)）が「移動先列の末尾に挿入」として扱います。移動先が現在と同じ列であってもこの処理は変わらないため、ガード無しで毎回PATCHを送ると、タイトルだけを直したつもりの保存でカードが自分の列の一番下へ動いてしまいます。ステータスが実際に変わったときだけPATCHを送ることで、この意図しない並び替えを避けています。
 
-**PATCHが失敗しても`refetch()`・`onUpdated()`までは必ず到達させます。** その時点でPUTは既に成功しているため、ここで早期returnすると保存済みのタイトル等が呼び出し元の一覧にもモーダル自身にも反映されないまま残ってしまいます。`refetch()`はサーバーの実際の状態（保存されたタイトル等・変更されなかったステータス）へ`<select>`を含む表示全体を揃え直し、`statusError`がなぜステータスだけ変わらなかったかを示します。2本のリクエストの**間**ではなく最後に1回だけ`refetch()`・`onUpdated()`を呼ぶのもポイントです。途中で呼ぶと`card`オブジェクトが差し替わり、上の`useEffect`が走って送信中の下書きを巻き戻してしまいます。
+**PATCHが失敗した場合は`refetch()`・`onUpdated()`を呼んだうえで、`onClose()`は呼ばずに早期returnします。** その時点でPUTは既に成功しているため、ここで何も呼ばずに終わると保存済みのタイトル等が呼び出し元の一覧にもモーダル自身にも反映されないまま残ってしまいます。`refetch()`はサーバーの実際の状態（保存されたタイトル等・変更されなかったステータス）へ`<select>`を含む表示全体を揃え直し、`statusError`がなぜステータスだけ変わらなかったかを示します。モーダルを閉じずに残すことで、ユーザーはそのエラーを見てから「保存」を押し直せます。
+
+**両方の保存に成功した場合だけ、最後に`onClose()`を呼んでモーダルを閉じます。** このときは`refetch()`を呼びません。直後に`onClose()`でこのモーダル自体がアンマウントされ、取得結果を表示する機会が無いためです（`handleArchiveToggle`が成功時に`refetch()`を呼ばないのと同じ理由）。呼び出し元の一覧は`onUpdated()`によって最新化されます。
 
 この設計には小さな既知の限界があります。PATCHが失敗した後、ユーザーがステータスに触れず他の項目だけ直して再保存すると、上のガードによりPATCHは再送されず、`statusError`は次に`changeStatus`が呼ばれるまで表示され続けます（`useMutation`の`error`は次の`mutate`開始時にしかクリアされないため。[08-form-and-mutation.md](./08-form-and-mutation.md)参照）。表示中の`<select>`の値自体は`refetch()`により常に正しいので実害は「古いエラー文が残る」ことだけであり、多くの箇所で使われている共有フック`useMutation`にリセット手段を足してまで解決する問題ではないと判断しています。
 
 ### 更新の反映範囲：このモーダル自身と、呼び出し元の両方
 
-保存が成功すると、2つの`refetch`系の処理を呼びます。
+`refetch`と`onUpdated`は担当範囲が異なります。
 
 ```tsx
 refetch()   // このモーダル自身のuseApi（card本体）を取り直す
@@ -81,6 +88,8 @@ onUpdated() // 呼び出し元（CrossBoardView・BoardDetailView・SearchView�
 ```
 
 `refetch`だけでは、モーダルの外にある一覧（カードの並びやステータス列）は更新されません。`onUpdated`だけでは、モーダル自身の表示（ステータスの下書き、およびフッターのアーカイブボタンの活性条件が参照する`card.status`）が古いままになります。要件5.4「横断ビュー上でカードを編集・ステータス変更すると、元のボード詳細画面にも反映される」は、呼び出し元（`CrossBoardView`・`BoardDetailView`・`SearchView`）がそれぞれ自分の`useApi`の`refetch`を`onUpdated`として渡すことで実現しています。
+
+前節で見たとおり、`onUpdated`は保存が成功すれば（モーダルを閉じる場合も、部分失敗で開いたままにする場合も）必ず呼びますが、`refetch`はモーダルを開いたままにする場合にしか呼びません。モーダルを閉じてこのコンポーネント自体がアンマウントされるなら、`card`を取り直しても表示する機会が無いためです。「このモーダル自身の表示を最新化する必要があるかどうか」で`refetch`の要否が決まる、という関係になっています。
 
 ---
 

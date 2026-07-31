@@ -14,7 +14,7 @@ type Props = {
   cardId: number | null
   /** 保存・ステータス変更に成功したとき（一覧の再取得を親に依頼するため）に呼ばれる */
   onUpdated: () => void
-  /** モーダルを閉じるとき（× ／背景クリック／Escape）に呼ばれる */
+  /** モーダルを閉じるとき（× ／背景クリック／Escape／保存やアーカイブの完了）に呼ばれる */
   onClose: () => void
 }
 
@@ -183,23 +183,28 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     // カードを置く。移動先が現在と同じ列でも同じ処理が走るので、無条件に送ると
     // 「タイトルを直しただけの保存」でカードが自分の列の一番下へ動いてしまう。
     if (status !== card.status) {
-      // 戻り値を見て早期returnしないのは、この時点でPUTは既に成功しているため。
-      // ここでreturnすると、保存済みのタイトル・説明・期日・ラベルが下のrefetch/onUpdatedを
-      // 経由せず、呼び出し元の一覧にもこのモーダル自身にも反映されないまま残ってしまう。
-      // 失敗の詳細はstatusErrorに入り、<select>の直下に表示される。
-      await changeStatus({ status })
+      const statusUpdated = await changeStatus({ status })
+      if (statusUpdated === null) {
+        // ステータス変更だけ失敗。この時点でPUTは既に成功しているため、その分（タイトル・
+        // 説明・期日・ラベル）は呼び出し元の一覧・このモーダル自身の両方へ反映しつつ、
+        // モーダルは閉じずに開いたままにする。refetch()がサーバーの実際の状態（保存された
+        // title等・変更されなかったstatus）へ<select>を含む表示全体を揃え直し、statusErrorが
+        // その直下に表示されるので、ユーザーはそれを見て「保存」を押し直せる。
+        // 「全項目の保存に成功したときだけ閉じる」という下のonClose()の方針はここでも変わらない。
+        refetch()
+        onUpdated()
+        return
+      }
     }
 
-    // このモーダル自身のcard（useApi）を再取得しつつ、親（一覧を持つページ）にも
-    // 再取得を依頼する。要件5.4「横断ビュー上でカードを編集…すると、元のボード詳細画面にも
-    // 反映される」は、この2つのrefetchによって満たされる。
-    //
-    // 2本のリクエストの間ではなく最後に1回だけ呼ぶ。途中でrefetch()するとcardオブジェクトが
-    // 差し替わり、上のuseEffectが走って送信中の下書きを巻き戻してしまう。また、PATCHが
-    // 失敗した場合でもここへ到達させることで、refetch()がサーバーの実際の状態（保存された
-    // title等・変更されなかったstatus）へ<select>を含む表示全体を揃え直してくれる。
-    refetch()
+    // ここへ到達するのは、タイトル等（PUT）と、変更されていればステータス（PATCH）の
+    // 両方の保存に成功した場合のみ。要件5.4「横断ビュー上でカードを編集…すると、元のボード
+    // 詳細画面にも反映される」を満たすため、呼び出し元（一覧を持つページ）には再取得を
+    // 依頼するが、このモーダル自身のcard（useApi）は再取得しない。直後のonClose()で
+    // このモーダル自体がアンマウントされ、取得結果を表示する機会が無いため
+    // （handleArchiveToggleがrefetch()を呼ばないのと同じ理由）。
     onUpdated()
+    onClose()
   }
 
   function handleStatusChange(event: ChangeEvent<HTMLSelectElement>) {
