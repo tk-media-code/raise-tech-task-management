@@ -1,0 +1,19 @@
+---
+description: 実装で新概念が出たら学習ドキュメント（docs/*）を更新するルール
+alwaysApply: true
+---
+
+# 学習ドキュメント
+
+実装で新しい概念・技術要素が登場したら、対応するドキュメント群を都度更新する。
+
+| 対象 | 配置 | 例 |
+| --- | --- | --- |
+| Spring Boot（FW） | `docs/spring-boot/` | Repository、Service、DTO、バリデーション、例外、認証 |
+| Java（言語） | `docs/java/` | ジェネリクス、ラムダ、record、例外 |
+| React（ライブラリ・周辺） | `docs/react/` | コンポーネント、フック、ルーティング、状態管理 |
+| TypeScript（言語。必要範囲の JS/ブラウザ API 含む） | `docs/typescript/` | ジェネリクス、ユニオン、非同期 |
+
+迷ったら: バックエンドは FW→`docs/spring-boot/`・言語→`docs/java/`、フロントは FW→`docs/react/`・言語→`docs/typescript/`。
+
+各 README の「このドキュメントの更新ルール」に従う。

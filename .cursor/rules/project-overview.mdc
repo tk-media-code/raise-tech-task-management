@@ -1,0 +1,20 @@
+---
+description: タスク管理アプリの概要・技術スタック・参照ドキュメント
+alwaysApply: true
+---
+
+# プロジェクト概要
+
+個人利用向けのタスク管理アプリ（Trelloライクなボード管理）。詳細は `docs/requirements.md`。
+
+- フロントエンド: React + TypeScript
+- バックエンド: Java + Spring Boot
+- データベース: PostgreSQL
+
+## 参照ドキュメント
+
+- `CONTRIBUTING.md` — 開発運用ルール（ブランチ命名・PR/マージ）
+- `docs/requirements.md` — 要件定義書
+- `docs/spring-boot/` / `docs/java/` — バックエンド学習ドキュメント
+- `docs/react/` / `docs/typescript/` — フロントエンド学習ドキュメント
+- `CLAUDE.md` — Claude Code 向けガイド（方針の正本。本 Rules は Cursor 向けに同等内容を適用）

@@ -1,0 +1,19 @@
+---
+description: Issue駆動の開発フロー（ブランチ・PR・マージ禁止）。実装着手前に必読
+alwaysApply: true
+---
+
+# 開発フロー（必読）
+
+詳細な手順・コマンド例は `CONTRIBUTING.md` を参照。厳守すること。
+
+1. **着手前に Issue を立てる。** 実装依頼を受けたら、Issue の有無を確認し、なければ先に `gh issue create` で作成する
+2. **Issue番号を含むブランチを作成する。** 形式は `feature/<issue番号>-<内容>`（バグ修正は `fix/...` 可）。`main` を最新化してから切る。マージ済みで不要なローカルブランチ（`git branch --merged main`、`main` 自身は除く）があれば削除する
+3. **`main` へ直接コミット・push しない。** GitHub 保護により拒否される。変更は必ず PR 経由
+4. **コミット → push → PR 作成まで行う。** PR 本文に `Closes #<issue番号>` を必ず含める
+5. **PR 作成後、`gh pr merge` は実行せず止まる。** マージはユーザー確認後。方式はマージコミット固定（Squash・Rebase 不可）
+
+## ブランチ例
+
+- `feature/10-github-workflow`
+- `feature/12-task-read-api`
