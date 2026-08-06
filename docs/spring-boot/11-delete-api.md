@@ -2,7 +2,7 @@
 
 [← 学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **40〜41章** をまとめています。
+> 元の学習ドキュメントにおける **40〜42章** をまとめています。
 
 ---
 
@@ -106,6 +106,77 @@ boardRepository.deleteById(id);
 ボードを1件削除すると、残ったボードの`position`に欠番（例：`1, 3, 4`）ができることがあります。[39章](./10-update-api.md#39-ボードの改名と並べ替え)で見た「移動元列を詰め直さない」判断、[38章](./10-update-api.md#38-アーカイブフラグ更新と冪等性)で見た「アーカイブする側は`position`に触れない」判断と、根っこは同じ考え方です。`findAllByOrderByPositionAscIdAsc()`による表示順は、欠番があっても崩れません。次にボードが並べ替えられたとき（`updatePosition`）に、リスト全体が1から振り直されるため、欠番は自然に解消されます。「常に完璧な連番を保つ」のではなく、「次に触ったときに正しくなればよい」という割り切りが、更新系・削除系のAPI全体を通じて一貫しています。
 
 📄 実装：`backend/.../entity/Card.java`・`Label.java`の`@OnDelete`、`backend/.../service/BoardService.java`の`delete`
+
+---
+
+## 42. 削除の可否を状態で決める——「在るか」だけでは足りないとき
+
+アーカイブ画面の「完全削除」ボタン（要件定義5.7）にあわせて、2本目の`@DeleteMapping`（`CardController.delete`）が登場します。ボード削除と同じ形に見えますが、`CardService.delete`の中身は40章のボード削除とは異なる判断をしています。
+
+```java
+@Transactional
+public void delete(Integer id) {
+	Card card = cardRepository.findById(id)
+			.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
+
+	if (!card.getIsArchived()) {
+		throw new InvalidRequestException("アーカイブ済みのカードのみ完全に削除できます");
+	}
+
+	cardRepository.delete(card);
+}
+```
+
+### `existsById`と`findById`の分かれ目
+
+40章のボード削除は`existsById`で足りていました。「削除してよいか」の判断材料が「そのIDの行が存在するかどうか」だけで済んだからです。カードの完全削除は「アーカイブ済みのカードのみ削除できる」（要件定義5.7）という制約があるため、`isArchived`という**行の中身**を読まないと判断できません。存在確認だけの`existsById`ではこの値を取れないので、実体を取得する`findById`を使う必要があります。「`existsById`か`findById`か」は「重いか軽いか」ではなく、「判断に行の内容が要るかどうか」で決まる、という基準です。
+
+`findByIdWithBoard`（`update`や`updateStatus`が使っている、`board`をjoin fetchするバージョン）ではなく素の`findById`を使っているのは、`delete`が`board`を一切参照しないためです。[24章](./07-jpa-performance.md#24-n1問題とその回避)で見たfetch戦略の裏返しで、使わない関連をjoin fetchしても実行コストが増えるだけの「死に荷」になります。
+
+### 状態による事前検証はService層——38章と同じ方針
+
+「完全削除」ボタンはアーカイブ画面にしか置いておらず、フロントエンド側は非アーカイブのカードに対してこのボタンを表示すること自体がありません。しかしAPIとしての制約は、UIがボタンをどこに置くかとは独立にService層で持っています。これは38章で見た「完了ステータスのカードのみアーカイブできます」という検証とまったく同じ構造で、[29章](./09-write-api-validation.md#29-リクエストdtoとbean-validation)の「フォームの`disabled`→Bean Validation→DBの制約」という多重防御の考え方の一部です。UIのボタン配置はあくまで「先回りの案内」であり、制約の正本（唯一の真実）はサーバー側にある、という一貫した設計方針がここでも貫かれています。
+
+### 400か404か409か
+
+「アーカイブされていないカードへのDELETE」は、意味的にはHTTPステータス409 Conflict（リソースの現在の状態がリクエストと競合している）が最も近い表現です。しかし本プロジェクトの`GlobalExceptionHandler`には409用のハンドラが無く、新設は今回のスコープではありません。代わりに、同じ「状態を理由に操作を拒否する」という構造を持つ38章のアーカイブ制約が400（`InvalidRequestException`）を使っていることに揃え、こちらも400としています。同じ種類の判断には同じステータスコードを割り当てることで、APIを呼ぶ側が「400が返ってきたら業務ルール違反」と一貫して解釈できるようにする狙いです。
+
+検証の順序にも意味があります。`findById().orElseThrow()`を先に書くことで、存在しないIDに対しては404が優先されます。もし先にアーカイブ状態をチェックしてしまうと、存在しないカードに対して「アーカイブされていません」という誤った理由の400が返りかねません。「対象が存在するか」は「その対象がどんな状態か」より手前にある、より根本的な確認です。
+
+### 冪等性の非対称——PATCHとDELETEの違い
+
+38章で見た`updateArchived`は、既に同じ状態（例：既にアーカイブ済みのカードを再度アーカイブしようとする）へのリクエストを200で受け入れる冪等な作りでした。一方、削除済みのカードへ再度DELETEを送ると、今度は404が返ります（1回目は204、2回目は404）。
+
+一見矛盾するようですが、この違いは「PATCHが表しているもの」と「DELETEが表しているもの」の違いから来ています。PATCH archiveは「アーカイブされた状態にしたい」という**意図する状態**を表すリクエストであり、既にその状態ならリクエストの目的は達成済みとみなせます。対してDELETEは「このURLが指すリソースを消したい」というリクエストで、2回目の時点でそのURLが指すリソースはもう存在しません。「存在しないものを操作しようとした」という事実そのものは、意図の達成不達成とは別の話であり、404を返すことで「他の場所で既に削除されていた」ことにクライアント側が気づけるという利点もあります。
+
+### 2つのカスケードの使い分け（41章の続き）
+
+41章では、ボード削除がDBの`ON DELETE CASCADE`に連鎖削除を任せている設計を見ました。カードの完全削除でも同じ仕組みが使われていますが、`CardService`の中には一見矛盾するように見えるコードが同居しています。
+
+```java
+// update()：カードは残したまま、付与ラベルだけ入れ替える
+cardLabelRepository.deleteByCardId(id);
+// …(中略)…
+cardLabelRepository.saveAll(cardLabels);
+```
+
+```java
+// delete()：card_labelを明示的には消さない
+cardRepository.delete(card);
+```
+
+`update`は`card_label`を明示的に`deleteByCardId`で消しているのに、`delete`は何もしていません。矛盾ではなく、**親であるcard行が消えるかどうか**で決まる使い分けです。`update`はカード自体を残したままラベルの付与だけを入れ替える操作なので、親行へのDELETEが発生せず、DBの`ON DELETE CASCADE`は発火しません。ラベルの差し替えはアプリケーションが自分で面倒を見る必要があります。一方`delete`はcard行そのものを消すため、`CardLabel.card`に付いた`@OnDelete(action = OnDeleteAction.CASCADE)`が効き、`card_label`の該当行はDBが自動的に削除します。なお、消えるのは`card_label`（カードとラベルの結び付き）だけで、`label`（ラベルそのもの）は他のカードからも参照されうる独立したリソースなので残ります。
+
+### positionを詰め直さない理由（39章・41章の延長線）
+
+```java
+cardRepository.delete(card);
+// positionは詰め直さない
+```
+
+39章・41章で見た「詰め直さない」という判断は、ここではさらに一歩踏み込んだ形で成り立ちます。アーカイブ済みのカードは、列の表示順を決める`findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc`（38章）の対象から、アーカイブされた時点で既に外れています。つまりこのカードを完全に削除しても、画面に表示されている列に**新たな**欠番が生まれることはありません（欠番は、アーカイブされた時点で既にできています）。「次に触ったときに正しくなればよい」という考え方を通り越して、「そもそも触る対象ではなくなっている」という状態です。
+
+📄 実装：`backend/.../service/CardService.java`の`delete`、`backend/.../controller/CardController.java`の`delete`
 
 ---
 
