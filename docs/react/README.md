@@ -27,6 +27,7 @@
 | 18〜21章 | フォームと書き込み（POST） | [08-form-and-mutation.md](./08-form-and-mutation.md) |
 | 22〜28章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
 | 29〜30章 | ボード管理（改名・削除） | [10-board-management.md](./10-board-management.md) |
+| 31〜32章 | カードの完全削除 | [11-card-deletion.md](./11-card-deletion.md) |
 
 ## 目次
 
@@ -60,6 +61,8 @@
 28. [単一リストのドラッグ＆ドロップとドラッグハンドル](./09-editing-and-drag-and-drop.md#28-単一リストのドラッグドロップとドラッグハンドル)
 29. [インライン改名編集とEscapeの競合](./10-board-management.md#29-インライン改名編集とescapeの競合)
 30. [削除と`key`による再マウント](./10-board-management.md#30-削除とkeyによる再マウント)
+31. [2つ目の削除機能——`useDelete`と`window.confirm`の再利用](./11-card-deletion.md#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)
+32. [影響範囲の見極め——なぜ`dataVersion`が要らないのか](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
 
 ---
 
@@ -300,6 +303,22 @@
 ボード削除を教材に、`window.confirm()`による確認、`useMutation`とは別の`useDelete`フックを設けた理由、204 No Contentの受け取り方を解説します。削除の影響が「そのボードの詳細画面を見ていたかもしれない」「他のページが持つカード一覧を最新化する必要がある」という2点に及ぶことと、後者を`<Routes key={dataVersion}>`という`key`によるページ全体の再マウントで解決する設計を扱います。
 
 📄 詳細：[10-board-management.md](./10-board-management.md#30-削除とkeyによる再マウント)
+
+---
+
+## 31. 2つ目の削除機能——`useDelete`と`window.confirm`の再利用
+
+アーカイブ済みカードの「完全削除」（要件定義5.7）を教材に、ボード削除（30章）のために作った部品——`useDelete`フック・`window.confirm`による確認・`apiPaths`の使い回し——が、2つ目の削除機能にそのままどう乗るかを解説します。行ごとに`useDelete`を持たせる理由が`useMutation`と同じ罠から来ていること、確認メッセージの中身は削除が何を巻き込むかで決まること、エラー表示に`SortableBoardRow`の`<p role="alert">`ではなく`StatusMessage`を選んだ理由も扱います。
+
+📄 詳細：[11-card-deletion.md](./11-card-deletion.md#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)
+
+---
+
+## 32. 影響範囲の見極め——なぜ`dataVersion`が要らないのか
+
+カードの完全削除では、ボード削除で必要だった`<Routes key={dataVersion}>`（30章）による全体再マウントが不要になります。「アーカイブ済みのカードのみ削除できる」という業務ルールが、削除の影響範囲をアーカイブ画面1枚に閉じ込めているためです。サーバー側の制約がフロントエンドの状態管理をどれだけ単純にするかという視点、楽観的更新をしない原則（19章）をここでも踏襲する理由を扱います。
+
+📄 詳細：[11-card-deletion.md](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
 
 ---
 

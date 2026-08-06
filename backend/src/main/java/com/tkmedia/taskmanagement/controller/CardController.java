@@ -8,7 +8,9 @@ import com.tkmedia.taskmanagement.dto.CardStatusUpdateRequest;
 import com.tkmedia.taskmanagement.dto.CardUpdateRequest;
 import com.tkmedia.taskmanagement.service.CardService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -147,5 +150,22 @@ public class CardController {
 	@PatchMapping("/{id}/archive")
 	public CardResponse updateArchived(@PathVariable Integer id, @Valid @RequestBody CardArchiveUpdateRequest request) {
 		return cardService.updateArchived(id, request);
+	}
+
+	/**
+	 * カードを完全に削除する（物理削除。付与されていたラベルとの結び付き＝card_labelの行も、
+	 * DB側のON DELETE CASCADEにより連動して削除される。ラベル自体は削除されず残る）。
+	 * 削除できるのはアーカイブ済みのカードのみ（要件定義5.7）。
+	 *
+	 * @param id 削除対象のカードID
+	 */
+	// BoardController.deleteと同じ形（戻り値void + @ResponseStatus(HttpStatus.NO_CONTENT)）。
+	// GET/POST/PUT/PATCHがいずれも「操作後のリソースの状態」を返すのに対し、DELETEは成功した時点で
+	// 返すべき表現そのものが無くなるため、本文なしの204がRESTの慣習として素直な選択になる
+	// （docs/spring-boot/11-delete-api.md 40章参照）。
+	@DeleteMapping("/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void delete(@PathVariable Integer id) {
+		cardService.delete(id);
 	}
 }

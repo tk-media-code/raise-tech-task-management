@@ -27,7 +27,7 @@
 | 26〜27章 | `@Configuration`によるBean定義とCORS設定 | [08-configuration-cors.md](./08-configuration-cors.md) |
 | 28〜32章 | 登録系API（POST）とバリデーション | [09-write-api-validation.md](./09-write-api-validation.md) |
 | 33〜39章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
-| 40〜41章 | 削除API（DELETE）とDBレベルのカスケード削除 | [11-delete-api.md](./11-delete-api.md) |
+| 40〜42章 | 削除API（DELETE）・DBレベルのカスケード削除・状態に依存する削除可否 | [11-delete-api.md](./11-delete-api.md) |
 
 ## 目次
 
@@ -72,6 +72,7 @@
 39. [ボードの改名と並べ替え](./10-update-api.md#39-ボードの改名と並べ替え)
 40. [削除API（DELETE）と204 No Content](./11-delete-api.md#40-削除apideleteと204-no-content)
 41. [物理削除とDBレベルのON DELETE CASCADE](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
+42. [削除の可否を状態で決める——「在るか」だけでは足りないとき](./11-delete-api.md#42-削除の可否を状態で決める在るかだけでは足りないとき)
 
 ---
 
@@ -400,6 +401,14 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 ボード削除時にカード・ラベルも連鎖的に削除される仕組みを解説します。`Board`エンティティに`@OneToMany`を持たせずDBの外部キー制約（`ON DELETE CASCADE`）に連鎖削除を任せている設計判断、JPAの`cascade`属性とDBレベルの`ON DELETE CASCADE`という2つの「カスケード」の違いを扱います。
 
 📄 詳細：[11-delete-api.md](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
+
+---
+
+## 42. 削除の可否を状態で決める——「在るか」だけでは足りないとき
+
+カードの完全削除（要件定義5.7）を教材に、「削除してよいか」の判断に行の中身（`isArchived`）が要る場合は`existsById`ではなく`findById`を使う理由、状態による事前検証をService層に置く方針（38章と同型）、409ではなく400を選んだ理由、PATCHとDELETEで冪等性の現れ方が異なる理由、`update`と`delete`で`card_label`への向き合い方が違う理由（親行が消えるかどうか）を解説します。
+
+📄 詳細：[11-delete-api.md](./11-delete-api.md#42-削除の可否を状態で決める在るかだけでは足りないとき)
 
 ---
 

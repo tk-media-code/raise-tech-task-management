@@ -58,6 +58,11 @@ function ArchiveView() {
             card={card}
             onSelect={(cardId) => setSelectedCardId(cardId)}
             onRestored={refetch}
+            // 完全削除の後もこの一覧を取り直すだけでよい。アーカイブ済みカードは横断ビュー・
+            // ボード詳細・検索結果のいずれにも元から出ていない（どの画面もarchived=falseで
+            // 取得している）ため、ボード削除のときのようなApp.tsx側の後始末（dataVersionを
+            // 変えてページ全体を作り直す）は不要（components/ArchivedCardItem.tsxのonDeleted参照）。
+            onDeleted={refetch}
           />
         ))}
       </div>
