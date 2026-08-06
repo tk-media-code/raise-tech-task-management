@@ -1,7 +1,9 @@
 package com.tkmedia.taskmanagement.service;
 
 import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
+import com.tkmedia.taskmanagement.dto.BoardPositionUpdateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
+import com.tkmedia.taskmanagement.dto.BoardUpdateRequest;
 import com.tkmedia.taskmanagement.dto.LabelCreateRequest;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.entity.Board;
@@ -13,6 +15,7 @@ import com.tkmedia.taskmanagement.repository.LabelRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -122,6 +125,95 @@ public class BoardService {
 		// ここでは何もしない。
 		Board saved = boardRepository.save(board);
 		return toResponse(saved);
+	}
+
+	/**
+	 * ボード名を変更する。
+	 *
+	 * @param id      対象ボードのID
+	 * @param request 変更内容（ボード名）
+	 * @return 更新後のボードのDTO
+	 * @throws ResourceNotFoundException 該当ボードが存在しない場合
+	 */
+	// createと同じくクラスのreadOnly=trueを上書きする。findByIdで取得したboardは、このメソッドの
+	// トランザクション・永続化コンテキストの中で管理され続けているエンティティであるため、
+	// setterで値を変えるだけでよい（明示的なsave()呼び出しは不要）。コミット時にHibernateが
+	// 変更検知（ダーティチェック）でUPDATE文を発行する（docs/spring-boot/10-update-api.md参照）。
+	@Transactional
+	public BoardResponse update(Integer id, BoardUpdateRequest request) {
+		Board board = boardRepository.findById(id)
+				.orElseThrow(() -> new ResourceNotFoundException("ボードが見つかりません（id=" + id + "）"));
+		// createのnameと同じ理由でtrimする（@NotBlankは「空白のみ」は弾くが前後の空白自体は残すため）。
+		board.setName(request.name().trim());
+		return toResponse(board);
+	}
+
+	/**
+	 * ボードの表示順を変更する（ボード管理モーダルでの `⠿` ドラッグ、`▲`/`▼` ボタンの両方から呼ばれる）。
+	 *
+	 * @param id      対象ボードのID
+	 * @param request 変更後の一覧内での挿入位置（0始まり）
+	 * @return 更新後のボードのDTO
+	 * @throws ResourceNotFoundException 該当ボードが存在しない場合
+	 */
+	// CardService.updateStatusと同じ「対象を抜いた並びに挿し込み、全体のpositionを1から
+	// 振り直す」という考え方だが、ボードにはカードのstatus・isArchivedに相当する区分が無いため、
+	// 対象は常に「全ボード」という1つのリストだけになる。CardRepositoryにあった
+	// 「採番用（アーカイブ含む全件）」「挿入位置算出用（非アーカイブのみ）」という
+	// 2つの母集団の使い分けは、ここでは不要になる。
+	@Transactional
+	public BoardResponse updatePosition(Integer id, BoardPositionUpdateRequest request) {
+		Board board = boardRepository.findById(id)
+				.orElseThrow(() -> new ResourceNotFoundException("ボードが見つかりません（id=" + id + "）"));
+
+		// findAllByOrderByPositionAscIdAscの戻り値を直接操作せず、可変なArrayListへコピーしてから
+		// 並べ替える。Spring Data JPAが返すListの実装がremoveIf/addを保証しない可能性があるため。
+		List<Board> ordered = new ArrayList<>(boardRepository.findAllByOrderByPositionAscIdAsc());
+		ordered.removeIf(b -> b.getId().equals(board.getId()));
+
+		// リクエストのpositionは「対象を除いた並びの中での0始まりの挿入位置」。
+		// 範囲外（サイズ以上）の指定はCardService.updateStatusと同じく末尾へ丸める（400にはしない）。
+		int insertIndex = Math.min(request.position(), ordered.size());
+		ordered.add(insertIndex, board);
+
+		// 全ボードのpositionを1から振り直す。カードの並べ替えと違い「移動元列」という概念が無く
+		// 対象は常にこの1リストだけなので、CardService.updateStatusのように一部だけ据え置く箇所が無く、
+		// 振り直し後に欠番（1,2,4のような歯抜け）が残ることも無い。
+		for (int i = 0; i < ordered.size(); i++) {
+			ordered.get(i).setPosition(i + 1);
+		}
+		// save()は呼ばない。ordered内の各BoardはこのメソッドのTransactionalが開始した
+		// 永続化コンテキストで管理されたエンティティであり、setPositionによる変更はコミット時の
+		// ダーティチェックで自動的にUPDATEされる（実際に値が変わった行だけにUPDATE文が発行される）。
+		return toResponse(board);
+	}
+
+	/**
+	 * ボードを削除する（物理削除）。
+	 *
+	 * @param id 削除対象のボードID
+	 * @throws ResourceNotFoundException 該当ボードが存在しない場合
+	 */
+	// 所属するカード・ラベル（さらにその先のcard_label）は、このメソッドの中では一切消さない。
+	// Boardエンティティはcard/labelへの@OneToManyコレクションを持たず、代わりにCard.board・
+	// Label.boardに付けた@OnDelete(action = OnDeleteAction.CASCADE)がDDL生成時にDB側の
+	// 外部キー制約へON DELETE CASCADEを刻んでいる。そのため、この1行のdeleteByIdがDBへ
+	// 送るDELETE文1本だけで、紐づく行がDB側で連鎖的に削除される。JPAのcascade = CascadeType.REMOVE
+	// （子を1件ずつSELECT→DELETEする）を使わないのは、個人利用アプリとはいえボード1件に紐づく
+	// カード件数が増えたときにN+1的なDELETEを発行したくないため。
+	@Transactional
+	public void delete(Integer id) {
+		// deleteByIdは対象が存在しない場合、例外を投げずに何もしないまま正常終了する
+		// （Spring Data JPA 3系の挙動）。そのままでは「削除できた（新規に0件消えた）」のか
+		// 「そもそも存在しなかった」のかをこのメソッドの外から区別できず、404を返せなくなるため、
+		// existsByIdで事前に存在確認する。
+		if (!boardRepository.existsById(id)) {
+			throw new ResourceNotFoundException("ボードが見つかりません（id=" + id + "）");
+		}
+		boardRepository.deleteById(id);
+		// 残ったボードのpositionは詰め直さない。歯抜け（例：1,3,4）になっても
+		// findAllByOrderByPositionAscIdAscによる表示順は崩れず、次にcreate/updatePositionが
+		// 呼ばれれば自然に解消される（カード削除時に移動元列を詰め直さないのと同じ判断）。
 	}
 
 	/**

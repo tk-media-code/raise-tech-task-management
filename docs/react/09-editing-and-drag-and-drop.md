@@ -2,7 +2,7 @@
 
 [← React学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **22〜27章** をまとめています。
+> 元の学習ドキュメントにおける **22〜28章** をまとめています。
 
 ---
 
@@ -348,6 +348,62 @@ const noSorting: SortingStrategy = () => null
 ```
 
 `verticalListSortingStrategy`は、ドラッグ中のカードが重なった位置に応じて**同じ列内の他のカードをCSS transformでずらす**（隙間を空ける）ためのストラテジーです。これは列**内**の並べ替えでは機能しますが、列**間**の移動では他の列のカードはずれないため、同じアプリの中で「列内は動く・列間は動かない」という一貫性のない見た目になってしまいます。本章の挿入ライン（`CardItem`の`showDropLine`）は、この「他のカードをずらす」演出に頼らず、ラインだけで挿入位置を示す設計です。他のカードを一切動かさないことで、`event.over.rect`（ドラッグ開始時点で測定された矩形）が常に正しく、`resolveDropTarget`の計算結果とずれる心配もありません。
+
+---
+
+## 28. 単一リストのドラッグ＆ドロップとドラッグハンドル
+
+要件定義5.1「ボードの並べ替え」は、ここまでの23〜27章で作ったカードのドラッグ＆ドロップ（`hooks/useCardDragAndDrop.ts`）と同じdnd-kitの上に建てますが、「列が1本しか無い」という違いにより、カード版から**外せるもの**があります。
+
+### カード版から落とせたもの
+
+| カード版（`useCardDragAndDrop.ts`） | ボード版（`hooks/useBoardDragAndDrop.ts`） | 外せる理由 |
+| --- | --- | --- |
+| `columnId(status, boardId)` / `parseColumnId` | 無し | 列が「ステータス×ボード」の組み合わせぶんあり、識別子を組み立てる必要があった。ボード管理モーダルの列は常に1本だけなので、固定の文字列`BOARD_LIST_DROPPABLE_ID`1つで足りる |
+| `cardCollisionDetection`（`pointerWithin`優先＋`closestCenter`フォールバック） | 標準の`closestCenter`をそのまま使用 | [27章](#27-挿入位置の可視化)でこの自前実装が必要だったのは、列の`useDroppable`とカードの`useSortable`が重なって「列そのもの＝末尾」に誤判定される問題への対処だった。列が1本しか無いボード管理ではこの重なりが起きないため、標準の判定で十分 |
+
+一方、次の要素はそのまま引き継いでいます。
+
+- `sensors`（`PointerSensor`の`distance: 8`、`TouchSensor`の`delay: 200, tolerance: 5`、`KeyboardSensor`）
+- `resolveDropTarget`を1つの純粋関数にまとめ、プレビュー（`handleDragMove`）と確定処理（`handleDragEnd`）の両方から呼ぶ設計（[27章](#27-挿入位置の可視化)）
+- [25章](#25-ドラッグドロップだけの楽観的更新)の楽観的更新の例外（`optimisticBoards`）
+- `SortableContext`の`strategy`に`noSorting`（常に`null`を返す）を渡し、挿入ラインだけで位置を示す設計（[23章](#23-dnd-kitの構成要素)）
+
+### `useDroppable`は列1本でも要る
+
+`BoardManageModal.tsx`は、一覧全体を覆う`<ul>`に`useDroppable({ id: BOARD_LIST_DROPPABLE_ID })`を呼んでいます。
+
+```tsx
+const { setNodeRef: setListNodeRef } = useDroppable({ id: BOARD_LIST_DROPPABLE_ID })
+```
+
+[23章](#23-dnd-kitの構成要素)の`SortableCardList`と同じ理由です。`SortableContext`だけでは「並べ替え対象のID」（＝既存のボードのID）にしか反応できないため、ボードが1件も無い一覧や、最後の行より下の余白へドロップする操作（＝「末尾へ挿入」）を検出できません。列を表す`useDroppable`をあわせて登録することで、この余白もドロップ可能な領域になります。
+
+### ドラッグハンドル：行全体ではなく`⠿`だけをドラッグ起点にする
+
+`CardItem`（[23章](#23-dnd-kitの構成要素)）は、カード全体を`useSortable`の`{...listeners}`対象にしていました。カードには「クリックして詳細を開く」という1つの操作しか無く、[24章](#24-センサーとactivationconstraint)の`activationConstraint.distance`だけでクリックとドラッグを区別できたためです。
+
+ボード管理モーダルの1行（`SortableBoardRow`）には`▲▼`・`改名`・`削除`という、それ自体クリックを必要とする要素が複数同居しています。行全体をドラッグ起点にすると、これらのボタンを押そうとしただけの操作までドラッグに巻き込まれかねません。そこで`useSortable`が返す2種類の「参照先」を、あえて別々のDOM要素に割り当てています。
+
+```tsx
+const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({
+  id: board.id,
+  disabled: isRenaming,
+})
+```
+
+| 参照 | 役割 | 割り当て先 |
+| --- | --- | --- |
+| `setNodeRef` | 実際に位置・`transform`が適用される要素（＝dnd-kitが動かす対象そのもの） | 行全体（`<li>`） |
+| `setActivatorNodeRef` + `{...listeners}` + `{...attributes}` | ドラッグ操作（`pointerdown`・`keydown`等）のリスナーを実際に貼る対象 | `⠿`の`<button>`だけ |
+
+`setNodeRef`と`setActivatorNodeRef`を分けるのはdnd-kit自身が用意している「ドラッグハンドル」パターンで、自分で`pointerdown`を奪い合うような実装を書かずに済みます。この結果、`⠿`を掴んだときだけ行全体（`<li>`）が動き、`▲▼`・`改名`・`削除`のクリックは今まで通りボタン自身の`onClick`として機能します。要件定義（`docs/requirements/03-screens.md`）が「`⠿` … ドラッグで並べ替え」と、ハンドルの存在を明記していることにも対応する形です。
+
+### `disabled: isRenaming`
+
+`useSortable`の`disabled`オプションに、改名編集中かどうかの真偽値をそのまま渡しています。改名中の行は、ドラッグ操作の起点にも、他の行がドロップされる対象にもならなくなります（詳しくは[docs/react/10-board-management.md 29章](./10-board-management.md#29-インライン改名編集とescapeの競合)）。
+
+📄 実装：`frontend/src/hooks/useBoardDragAndDrop.ts`、`frontend/src/components/SortableBoardRow.tsx`、`frontend/src/components/BoardManageModal.tsx`
 
 ---
 

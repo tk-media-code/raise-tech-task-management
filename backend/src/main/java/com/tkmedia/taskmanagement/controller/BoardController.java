@@ -1,17 +1,24 @@
 package com.tkmedia.taskmanagement.controller;
 
 import com.tkmedia.taskmanagement.dto.BoardCreateRequest;
+import com.tkmedia.taskmanagement.dto.BoardPositionUpdateRequest;
 import com.tkmedia.taskmanagement.dto.BoardResponse;
+import com.tkmedia.taskmanagement.dto.BoardUpdateRequest;
 import com.tkmedia.taskmanagement.dto.LabelCreateRequest;
 import com.tkmedia.taskmanagement.dto.LabelResponse;
 import com.tkmedia.taskmanagement.service.BoardService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
@@ -79,6 +86,50 @@ public class BoardController {
 	public ResponseEntity<BoardResponse> create(@Valid @RequestBody BoardCreateRequest request) {
 		BoardResponse created = boardService.create(request);
 		return ResponseEntity.created(URI.create("/api/boards/" + created.id())).body(created);
+	}
+
+	/**
+	 * ボード名を変更する。
+	 *
+	 * @param id      対象ボードのID
+	 * @param request リクエストボディ（変更後のボード名）
+	 * @return 更新後のボード。存在しなければ404
+	 */
+	// CardController.updateと同じ理由で戻り値は素のBoardResponse（ResponseEntityでラップしない）。
+	// 既存リソースの更新であり、201やLocationヘッダーが必要な新規作成とは違うため。
+	@PutMapping("/{id}")
+	public BoardResponse update(@PathVariable Integer id, @Valid @RequestBody BoardUpdateRequest request) {
+		return boardService.update(id, request);
+	}
+
+	/**
+	 * ボードの表示順を変更する（ボード管理モーダルでの並べ替え）。
+	 *
+	 * @param id      対象ボードのID
+	 * @param request リクエストボディ（変更後の一覧内での挿入位置）
+	 * @return 更新後のボード。存在しなければ404
+	 */
+	// CardController.updateStatusと同じ理由でPUTではなくPATCHを使う。名前を含まない
+	// 「並び順だけ」の部分更新であるため。
+	@PatchMapping("/{id}/position")
+	public BoardResponse updatePosition(
+			@PathVariable Integer id, @Valid @RequestBody BoardPositionUpdateRequest request) {
+		return boardService.updatePosition(id, request);
+	}
+
+	/**
+	 * ボードを削除する（物理削除。所属するカード・ラベルもDB側のON DELETE CASCADEにより連動して削除される）。
+	 *
+	 * @param id 削除対象のボードID
+	 */
+	// 戻り値を返す必要が無い（削除後にクライアントへ渡すべきリソースの表現が無い）ため、voidにし、
+	// @ResponseStatus(HttpStatus.NO_CONTENT)で204を明示する。GET/POST/PUT/PATCHがいずれも
+	// 「リソースの現在の状態」を返すのに対し、DELETE成功時は返すべき状態そのものが無くなるため、
+	// 本文なしの204がRESTの慣習として素直な選択になる。
+	@DeleteMapping("/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void delete(@PathVariable Integer id) {
+		boardService.delete(id);
 	}
 
 	/**

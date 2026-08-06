@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Route, Routes, useLocation } from 'react-router'
+import { Link, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router'
 import { apiPaths } from './api/client'
 import BoardManageModal from './components/BoardManageModal'
 import BoardSelect from './components/BoardSelect'
@@ -38,6 +38,37 @@ function App() {
   // 1つずつ増える）を1件ずつ遡るのではなく、検索を開く直前の画面へ一直線に戻れるように、
   // 遷移元のパスをLinkのstateとして持たせておく（pages/SearchView.tsx参照）。
   const location = useLocation()
+  const navigate = useNavigate()
+  // 「今表示しているボード詳細のID」を判定するためだけに使う。BoardSelect.tsxが選択状態の
+  // 判定に使っているのと同じuseMatchで、ボード削除時に「削除したボードをまさに見ていたか」を
+  // 判断する（handleBoardDeleted参照）。
+  const boardDetailMatch = useMatch('/boards/:boardId')
+
+  // ボード削除のたびに増える値。<Routes>のkeyに渡すことで、削除の瞬間に今表示中のページ
+  // （CrossBoardView・ArchiveView・SearchViewなど）を強制的に再マウントさせる。
+  // これらのページは自前のuseApiでカード一覧を取得しており、Appからはrefetchを呼べない。
+  // ボードを削除すると、そのボードに属していたカードもDB側でカスケード削除されるが、
+  // 何もしなければ「削除したはずのボードのカードが、開いたままの画面に残り続ける」ことになる。
+  // keyを変えてコンポーネントを丸ごと作り直すと、内部のuseApiが最初から走り直し、
+  // サーバーの最新状態（＝カードが消えた状態）に揃う。削除以外の操作ではこの値を変えないため、
+  // 通常の操作で余計な再マウントは起きない。
+  const [dataVersion, setDataVersion] = useState(0)
+
+  /**
+   * ボード削除（BoardManageModal経由）が成功したときに呼ばれる。
+   * 改名・並べ替え・新規作成（refetchBoardsだけで足りる操作）と違い、削除は
+   * 「今まさにそのボードの詳細画面を見ていた」可能性があるぶん、追加の後始末が要る。
+   */
+  function handleBoardDeleted(deletedBoardId: number) {
+    // 削除したボードの詳細画面（/boards/{id}）を表示中であれば、存在しなくなった画面に
+    // 取り残されないよう横断ビューへ戻す（プロトタイプが選択中ビューを削除したとき
+    // 「すべて」表示へ戻すのと同じ考え方）。
+    if (boardDetailMatch !== null && boardDetailMatch.params.boardId === String(deletedBoardId)) {
+      navigate('/')
+    }
+    refetchBoards()
+    setDataVersion((version) => version + 1)
+  }
 
   return (
     // min-h-screen: コンテンツが短くてもビューポート全体を覆う（背景色の塗り残しを防ぐ）
@@ -46,9 +77,8 @@ function App() {
         <h1 className="text-xl font-bold">タスク管理アプリ</h1>
         <div className="mt-3 flex items-center gap-2">
           <BoardSelect boards={boards} loading={boardsLoading} error={boardsError} />
-          {/* ⚙ ボード管理（要件6.2②）。新規作成が実装できたため有効化した。
-              改名・削除・並べ替えはPUT/DELETE系APIが未実装のため、モーダル内の該当ボタンは
-              引き続きdisabledのまま（components/BoardManageModal.tsx参照）。 */}
+          {/* ⚙ ボード管理（要件6.2②）。新規作成・改名・削除・並べ替えのすべてを
+              components/BoardManageModal.tsxの中で行う。 */}
           <button
             type="button"
             onClick={() => setBoardManageOpen(true)}
@@ -86,7 +116,10 @@ function App() {
       </header>
 
       <main className="p-6">
-        <Routes>
+        {/* keyにdataVersionを渡している理由はdataVersion自体のコメント参照。
+            ボード削除以外のタイミングでは値が変わらないため、通常のページ遷移・再レンダリングでは
+            これまで通りアンマウントされない。 */}
+        <Routes key={dataVersion}>
           {/* boardsをそのままpropsで渡す（CrossBoardView自身にGET /api/boardsを
               呼ばせない）。elementに書けるのはただのJSXなので、他のpropsと同じように
               値を渡せる（docs/react/05-router.md 13章参照）。 */}
@@ -100,7 +133,8 @@ function App() {
       <BoardManageModal
         open={boardManageOpen}
         boards={boards ?? []}
-        onCreated={refetchBoards}
+        onChanged={refetchBoards}
+        onDeleted={handleBoardDeleted}
         onClose={() => setBoardManageOpen(false)}
       />
     </div>

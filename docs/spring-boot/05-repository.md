@@ -55,7 +55,7 @@ List<Label> findByBoardIdOrderByIdAsc(Integer boardId);
 | `BoardId` | `Label`エンティティの`board`フィールド（[12章](./03-entity-jpa.md#12-リレーション関連の書き方)の`@ManyToOne`）の先にある`id`を辿るという意味。生成されるSQLは`label`テーブルの`board_id`列との単純な比較になり、`board`テーブルへの実際のJOINは発生しない |
 | `OrderByPositionAscIdAsc` | `position`の昇順、`position`が同値の場合は`id`の昇順、という並び替え条件 |
 
-`findByBoardIdOrderByIdAsc(Integer boardId)`は「引数`boardId`と`label.board.id`が一致する行を、`id`昇順で返す」というSQL相当の処理に変換されます。`BoardRepository.findAllByOrderByPositionAscIdAsc()`で`position`だけでなく`id`も第2ソートキーに加えているのは、`position`の値が（将来の並び替え機能の実装状況によっては）重複しうる場合に、一覧の表示順が実行のたびに揺れないようにするためです。
+`findByBoardIdOrderByIdAsc(Integer boardId)`は「引数`boardId`と`label.board.id`が一致する行を、`id`昇順で返す」というSQL相当の処理に変換されます。`BoardRepository.findAllByOrderByPositionAscIdAsc()`で`position`だけでなく`id`も第2ソートキーに加えているのは、ボードの並べ替え機能（[39章](./10-update-api.md#39-ボードの改名と並べ替え)）が実装された今も、`position`は一意性をDB制約で保証しているわけではなく、あくまでアプリケーション側（`BoardService.updatePosition`が常に1から連番へ振り直す処理）が重複しないよう努めているだけだからです。何らかの理由で値が重複した場合でも、`id`が最終的なタイブレーカーとして働くことで、一覧の表示順が実行のたびに揺れることを防いでいます。
 
 クエリメソッドは手軽な反面、条件が増えるほどメソッド名が長くなり読みにくくなるという限界があります。カード一覧のような「4つの条件をすべて任意で組み合わせる」検索は、この仕組みでは表現しきれません（[19章](#19-queryとjpql動的な絞り込み)）。
 
