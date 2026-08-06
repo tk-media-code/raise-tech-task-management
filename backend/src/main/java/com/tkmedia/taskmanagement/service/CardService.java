@@ -397,6 +397,53 @@ public class CardService {
 		return toResponses(List.of(card)).get(0);
 	}
 
+	/**
+	 * カードを完全に削除する（物理削除）。削除できるのはアーカイブ済みのカードのみとする（要件定義5.7）。
+	 *
+	 * @param id 削除対象のカードID
+	 * @throws ResourceNotFoundException 該当カードが存在しない場合
+	 * @throws InvalidRequestException   対象カードがアーカイブされていない場合
+	 */
+	// クラスに付けた @Transactional(readOnly = true) を、書き込み（DELETE文の発行）を行う
+	// このメソッドだけ @Transactional で上書きする（create・update等と同じ理由）。
+	@Transactional
+	public void delete(Integer id) {
+		// --- 1. カードの取得 ---
+		// BoardService.deleteは「在るかどうか」だけで削除してよいかを判断できたのでexistsByIdで
+		// 足りたが、こちらは「アーカイブ済みかどうか」というカードの中身を見て判断する必要があるため、
+		// 実体を取得するfindByIdを使う。boardを参照しないメソッドなので、joinしてboardまで取得する
+		// findByIdWithBoardではなく、素のfindByIdで十分（Card.boardはLAZYなので、使わなければ
+		// 追加のSELECTも発生しない）。
+		Card card = cardRepository.findById(id)
+				.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
+
+		// --- 2. 削除の可否を状態で判定する ---
+		// 「完全削除」ボタンはアーカイブ画面にしか置いていないが、それはUI側の導線の話であって、
+		// APIとしての制約はこちらで持つ（updateArchivedの「完了ステータスのカードのみアーカイブ
+		// できます」と同じ、「業務ルールの検証はService層」という方針）。取り消せない操作なので、
+		// 画面を経由しないリクエストであっても、作業中・未着手のカードが誤って消えないようにする。
+		if (!card.getIsArchived()) {
+			throw new InvalidRequestException("アーカイブ済みのカードのみ完全に削除できます");
+		}
+
+		// --- 3. 削除 ---
+		// 中間テーブルcard_labelの行は、ここで明示的に削除しない。CardLabel.cardに付いている
+		// @OnDelete(action = OnDeleteAction.CASCADE)がDBの外部キー制約にON DELETE CASCADEを
+		// 刻んでいるため、このcardへのDELETE1本でDB側が連鎖的にcard_label行を削除してくれる
+		// （BoardService.deleteがボード削除時にcard・labelの削除をDBへ任せているのと同じ仕組み。
+		// docs/spring-boot/11-delete-api.md 41章参照）。update()がcardLabelRepository.deleteByCardIdを
+		// 明示的に呼んでいるのと矛盾はしない。あちらは「カード自体は残したままラベルの付与だけ
+		// 入れ替える」場面であり、親であるcard行が消えないためDBのカスケードは発火しない。
+		// なお、消えるのはcard_label（カードとラベルの結び付き）だけで、label（ラベルそのもの）は
+		// 他のカードからも参照されうる独立したリソースなので残る。
+		cardRepository.delete(card);
+
+		// positionは詰め直さない。アーカイブ済みのカードは、列の並びを決める
+		// findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAscの対象から既に外れているため、
+		// このカードを削除しても、表示されている列に新たな欠番が生まれることはない
+		// （欠番はアーカイブされた時点で既にできている。updateArchivedのコメント参照）。
+	}
+
 	// descriptionの正規化：未入力(null)・空白のみの入力を、DB上は同じ意味であるnullへ統一する。
 	// 空文字列とnullをどちらも「未設定」として同一視することで、CardResponse.descriptionを
 	// 読む側（フロントエンド）が2通りの「無い」を区別する必要がなくなる。
