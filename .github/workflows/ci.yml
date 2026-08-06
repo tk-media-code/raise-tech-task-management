@@ -1,6 +1,13 @@
-# PRの作成・更新のたびに、backend/frontendそれぞれのビルド・検査を自動実行するワークフロー。
-# これが無いと「コンパイルが通らないコード」「型エラーがあるコード」でもPRを作成でき、
-# レビュアーが気付くまでマージ可能な状態のままになってしまう。
+# PRの作成・更新のたびに、backend/frontendそれぞれのビルドが通ることだけを自動確認する
+# ワークフロー。静的解析（Checkstyle・SpotBugs・oxlint）と既存テストの実行は、
+# ここでは行わない。それらはpush前のローカルチェック（scripts/quality-check.sh、
+# Claude Code利用時は .claude/hooks/pre-push-quality-check.sh による機械的強制）が
+# 担当する（CONTRIBUTING.md 5章参照）。
+#
+# なぜCIとpush前チェックで役割を分けているか: CIはPRを作成・更新した「後」にしか
+# 走らず、問題に気づくタイミングとして遅い。品質上の問題（静的解析の指摘・テスト失敗）
+# はpush前に検出・修正すべきもので、CIの役割は「開発者のローカル環境固有の事情に
+# 依存せず、クリーンなマシンでビルドが通ること」を最終確認する二重の網に絞っている。
 name: CI
 
 on:
@@ -11,32 +18,8 @@ on:
 
 jobs:
   backend:
-    name: Backend (Gradle)
+    name: Backend (compile + package)
     runs-on: ubuntu-latest
-    # backend/src/main/resources/application.properties が要求する3つの環境変数
-    # （DB_URL/DB_USERNAME/DB_PASSWORD）を、下のservicesで起動するPostgreSQLに向ける。
-    # これはテスト基盤を新たに整備するためではなく、既存のTaskManagementApplicationTests
-    # （contextLoads）を「DB未接続で失敗する」状態のままCIに入れないための最小限の措置。
-    env:
-      DB_URL: jdbc:postgresql://localhost:5432/taskmanagement_ci
-      DB_USERNAME: ci_user
-      DB_PASSWORD: ci_password
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_DB: taskmanagement_ci
-          POSTGRES_USER: ci_user
-          POSTGRES_PASSWORD: ci_password
-        ports:
-          - 5432:5432
-        # コンテナ起動直後はPostgreSQLがまだ接続を受け付けないため、
-        # pg_isreadyで「実際に接続できる状態」になるまでジョブの開始を待たせる。
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -51,25 +34,23 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # build.gradleのcheckタスクにはcheckstyleMain・spotbugsMain（静的解析）と
-      # test（既存のcontextLoadsスモークテスト）がぶら下がっており、
-      # buildタスクはこのcheckに加えてbootJarによるビルド可否まで確認する。
-      - name: Build and check
+      # assemble: compileJava・compileTestJava（本体・テストコードのコンパイル）を経て
+      # bootJarのパッケージングまで確認する。静的解析（checkstyleMain・spotbugsMain）や
+      # test（既存のcontextLoadsスモークテスト）が依存する check タスクは含まない
+      # （build = assemble + check だが、あえて assemble だけを使う）。
+      # testClasses（テストコードのコンパイルのみ、実行はしない）を加えているのは、
+      # 本体のリファクタリングでテストソースが構文的に壊れているのに、assembleだけでは
+      # 気づけずに緑のまま通過してしまう事故を防ぐため。テストの実行自体はしないので、
+      # 「静的解析・テストの実行はpush前チェックに任せる」という役割分担には反しない。
+      # application.properties の ${DB_URL} 等は実行時に解決されるプレースホルダであり、
+      # コンパイル・パッケージングの段階では未設定でも問題にならないため、
+      # 以前あったPostgreSQLサービスコンテナやDB系環境変数はもう必要ない。
+      - name: Compile and package
         working-directory: backend
-        run: ./gradlew build
-
-      # 失敗時、Checkstyle/SpotBugsのレポート（何が・どこで検出されたか）をArtifactとして
-      # 残す。GitHub ActionsのログはHTMLレポートより読みにくいため。
-      - name: Upload reports
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-reports
-          path: backend/build/reports/
-          retention-days: 7
+        run: ./gradlew assemble testClasses --console=plain
 
   frontend:
-    name: Frontend (oxlint + build)
+    name: Frontend (type check + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -85,16 +66,8 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      # 現時点ではerror（correctnessカテゴリ、既定で有効）のみでCIを失敗させる。
-      # 品質チェックでsuspicious/jsx-a11y/promiseから検出された8件の指摘（別Issueで管理）は
-      # 現状warning扱いのため、--deny-warningsを付けていないこのコマンドでは失敗しない。
-      # それらの指摘が解消され次第、--deny-warningsを付けて警告もCIの失敗対象に含める
-      # ことを検討する（段階的にゲートを厳しくする方針）。
-      - name: Lint
-        working-directory: frontend
-        run: npx oxlint
-
       # tsc -b（型チェック）を含むVite本番ビルド。型エラーがあればここで失敗する。
+      # oxlintによるLintはここでは行わない（push前チェックの担当）。
       - name: Build
         working-directory: frontend
         run: npm run build

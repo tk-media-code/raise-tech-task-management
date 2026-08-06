@@ -232,6 +232,10 @@ oxlintのルールは`correctness`（既定で有効）・`suspicious`・`pedant
 
 [9章](./03-state-effect.md#9-フックのルール)で扱った`react/rules-of-hooks`と対になる、`useEffect`の依存配列漏れを検出する`react/exhaustive-deps`というルールも試しましたが、oxlintの設定ファイル（`categories`・`rules`のどちらの経由でも）有効化できないことを実機で確認しました。設定ファイルに`"react/exhaustive-deps": "warn"`を足しても、実行時に読み込まれるルール総数が変化しないためです。`pages/SearchView.tsx`・`components/SortableBoardRow.tsx`に残る`// eslint-disable-next-line react-hooks/exhaustive-deps`というコメント（ESLintからの移行時の名残）は、現状どのツールにも検証されないコメントになっています。
 
-### CIとの関係
+### push前チェックとの関係
 
-oxlintは既定で「`warn`扱いの指摘だけが残っている状態」を失敗として扱いません（終了コード0）。`--deny-warnings`オプションを付けると、この挙動を変えて`warn`扱いの指摘（`suspicious`カテゴリや上記8件を含む）もCIの失敗として扱えます。[CONTRIBUTING.md](../../CONTRIBUTING.md#5-ci自動チェック)の方針では、上記8件が解消されるまでの間はこのオプションを付けず、まずerror（`correctness`カテゴリ、現状0件）のみでゲートしています。指摘を1件ずつ解消し終えたら`--deny-warnings`を付け、以後の新しい警告もCIで検出できる状態へ引き上げる想定です。
+oxlintは既定で「`warn`扱いの指摘だけが残っている状態」を失敗として扱いません（終了コード0）。`--deny-warnings`オプションを付けると、この挙動を変えて`warn`扱いの指摘（`suspicious`カテゴリや上記8件を含む）も失敗として扱えます。
+
+このoxlintの実行は、現在はCIではなく**push前のローカルチェック**（`scripts/quality-check.sh`。Claude Code利用時は`.claude/hooks/pre-push-quality-check.sh`が`git push`実行前に自動で呼び出す）が担っています。CIはPRを作成した「後」にしか走らず問題に気づくタイミングとして遅いため、静的解析はpush前チェック側に寄せ、CIは`tsc -b && vite build`が通ることの確認に絞っています（詳しい経緯は[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-push前の品質チェック)参照）。
+
+[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-push前の品質チェック)の方針では、上記8件（Issue #66・#67で管理）が解消されるまでの間は`--deny-warnings`を付けず、まずerror（`correctness`カテゴリ、現状0件）のみでゲートしています。指摘を1件ずつ解消し終えたら`scripts/quality-check.sh`内の`OXLINT_ARGS`に`--deny-warnings`を付け、以後の新しい警告もpush前チェックで検出できる状態へ引き上げる想定です。

@@ -9,7 +9,8 @@
 2. [ブランチ運用](#2-ブランチ運用)
 3. [Pull Requestの作成とマージ](#3-pull-requestの作成とマージ)
 4. [GitHub側の保護設定](#4-github側の保護設定)
-5. [CI（自動チェック）](#5-ci自動チェック)
+5. [push前の品質チェック](#5-push前の品質チェック)
+6. [CI（自動チェック）](#6-ci自動チェック)
 
 ---
 
@@ -20,16 +21,19 @@
 1. **Issueを立てる** — 開発に着手する前に、必ず Issue を作成します（「何を」「なぜ」やるかを明確にするため）
 2. **ブランチを作成する** — 作成した Issue の番号を含むブランチを、`main` から切ります
 3. **開発してコミットする** — 変更内容が分かるメッセージでコミットします
-4. **プッシュする** — 作業ブランチをリモートに push します
-5. **PRを作成する** — `main` へ向けて PR を作成し、本文に対応する Issue 番号を記載します
-6. **マージする** — PR をマージします（`main` への直接 push はできません）
-7. **後片付けする** — マージ後、リモート・ローカル両方の作業ブランチを削除します。Issue は PR のマージに連動して自動的に close されます
+4. **品質チェックを実行する** — push する前に必ず `bash scripts/quality-check.sh` を実行し、指摘が0件であることを確認します（詳細は[5章](#5-push前の品質チェック)）。指摘があれば修正し、コミットし直してから再度実行します
+5. **プッシュする** — 作業ブランチをリモートに push します
+6. **PRを作成する** — `main` へ向けて PR を作成し、本文に対応する Issue 番号を記載します
+7. **マージする** — PR をマージします（`main` への直接 push はできません）
+8. **後片付けする** — マージ後、リモート・ローカル両方の作業ブランチを削除します。Issue は PR のマージに連動して自動的に close されます
 
 ```mermaid
 flowchart LR
     A[Issueを立てる] --> B[ブランチ作成]
     B --> C[開発・コミット]
-    C --> D[プッシュ]
+    C --> Q[品質チェック]
+    Q -->|指摘あり| C
+    Q -->|指摘なし| D[プッシュ]
     D --> E[PR作成]
     E --> F[マージ]
     F --> G[ブランチ削除・Issue close]
@@ -114,31 +118,62 @@ git branch -d feature/<issue番号>-<内容>
 
 ---
 
-## 5. CI（自動チェック）
+## 5. push前の品質チェック
 
-`main` へのPRを作成・更新すると、GitHub Actions（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）が自動的に以下を検査します。コンパイルが通らない・型エラーがある・静的解析で問題が見つかったコードにレビュアーが気付けないままマージされることを防ぐためのものです。
+**静的解析（Checkstyle・SpotBugs・oxlint）と既存テストの実行は、push前のこの手順が唯一の検出機会です。** [6章](#6-ci自動チェック)のCIはPRを作成・更新した「後」にしか走らず、ビルドが通ることしか確認しないためです（経緯は6章の冒頭を参照）。
+
+### 実行コマンド
+
+```bash
+# backend・frontend両方
+bash scripts/quality-check.sh
+
+# 片方だけ確認したい場合
+bash scripts/quality-check.sh --backend
+bash scripts/quality-check.sh --frontend
+```
+
+| 対象 | 内容 |
+| --- | --- |
+| backend | `./gradlew check`（コンパイル + Checkstyle + SpotBugs + 既存のスモークテスト） |
+| frontend | `npx oxlint`（Lint）+ `npm run build`（`tsc -b`による型チェック + Viteビルド） |
+
+いずれもDockerコンテナ内で実行されます（`docker compose up -d`で起動しておく必要があります）。
+
+### 終了コードの意味
+
+| 終了コード | 意味 | 取るべき行動 |
+| --- | --- | --- |
+| 0 | 全チェック合格 | pushしてよい |
+| 1 | 品質上の問題を検出 | 表示された指摘を修正し、コミットし直してから再実行する |
+| 3 | 環境の問題で実行できない（コンテナ未起動・git worktree内からの実行など） | 表示された案内に従い、環境を直してから再実行する |
+
+> **frontendのLintは現時点で`--deny-warnings`を付けていません。** `.oxlintrc.json`強化時の品質チェックで検出したsuspicious/jsx-a11y/promiseの指摘（8件、Issue #66・#67で管理）がwarning扱いで残っているため、それらを解消するまでは`scripts/quality-check.sh`内の`OXLINT_ARGS`を空のままにしています。解消後に`--deny-warnings`へ変更し、warningも検出対象にする想定です。
+
+### Claude Codeでは機械的に強制される
+
+`.claude/settings.json`のPreToolUseフック（`.claude/hooks/pre-push-quality-check.sh`）が、`git push`を含むBashコマンドの実行を検知し、上記と同じ`scripts/quality-check.sh`を自動実行します。品質チェックに失敗すると、**`git push`を含むBashコマンドの実行自体がブロックされます。**
+
+- ブロックされた場合、Claudeは指摘内容を確認し、指摘が解消するまで「修正 → コミット → 再度push」を自分で繰り返します（安易に作業を止めたり、ユーザーに丸投げしたりしません）
+- 誤検知やチェック自体の不具合時のためのエスケープハッチとして、**ユーザーが明示的に許可した場合のみ** `SKIP_QUALITY_CHECK=1 git push ...` を使えます。Claudeが自己判断でこれを付けることはありません
+- **`.claude/settings.json`を変更した場合、Claude Codeの再起動が必要です。** hooksはセッション開始時にのみ読み込まれ、動的な変更を反映しません
+- git worktree内では動作しません（`docker exec`がメインチェックアウト側のコードを検査してしまう事故を防ぐための意図的な仕様）。メインチェックアウトで作業してください
+
+### Cursor・素のgit運用の場合
+
+**Cursorや、ターミナルから直接`git push`する場合は、上記フックが働かず自動ブロックされません。** push前に必ず手動で `bash scripts/quality-check.sh` を実行してください（`.cursor/rules/development-workflow.mdc`にも同様の運用ルールを記載しています）。
+
+---
+
+## 6. CI（自動チェック）
+
+`main` へのPRを作成・更新すると、GitHub Actions（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）が自動的に以下を検査します。
 
 | job | 内容 |
 | --- | --- |
-| backend | `./gradlew build`（コンパイル + Checkstyle + SpotBugs + 既存のスモークテスト）。PostgreSQLコンテナをGitHub Actions上に一時的に起動し、DB接続を要する`TaskManagementApplicationTests`を実際に走らせる |
-| frontend | `npx oxlint`（Lint）+ `npm run build`（`tsc -b`による型チェック + Viteビルド） |
+| backend | `./gradlew assemble testClasses`（本体・テストコードのコンパイルと、`bootJar`によるパッケージング） |
+| frontend | `npm run build`（`tsc -b`による型チェック + Viteビルド） |
 
-レビュー承認と同じく必須のステータスチェックには設定していませんが（現状1人開発のため）、マージ前に必ず結果を確認してください。失敗した場合、backendのCheckstyle/SpotBugsレポートはワークフローの実行結果からArtifactとしてダウンロードできます。
+**静的解析（Checkstyle・SpotBugs・oxlint）と既存テストの実行はここでは行いません。** それらは[5章](#5-push前の品質チェック)のpush前チェックが担当します。CIはPRを作成・更新した「後」にしか走らず、品質上の問題に気づくタイミングとして遅いため、主たる品質ゲートとしては据えていません。CIの役割は、開発者のローカル環境固有の事情（Dockerコンテナの状態など）に依存せず、**クリーンな環境でビルドが通ることを最終確認する**二重の網に絞っています。
 
-> **frontendのLintは現時点で`--deny-warnings`を付けていません。** `.oxlintrc.json`強化時の品質チェックで検出したsuspicious/jsx-a11y/promiseの指摘（8件、別Issueで管理）がwarning扱いで残っているため、それらを解消するまではerror（correctnessカテゴリ）のみでCIをゲートする段階的な運用にしています。解消後に`--deny-warnings`を付けてwarningもCI失敗の対象にする想定です。
-
-### ローカルで事前に確認する
-
-PRを作成する前に、ローカル（Dockerコンテナ内）で同じチェックを実行できます。backendはJava 25のtoolchainを要求するため、ホストのJavaバージョンに関わらずコンテナ内で実行してください。
-
-```bash
-# backend（コンパイル + Checkstyle + SpotBugs + テスト）
-docker exec -w /workspace task-management-backend ./gradlew check
-
-# frontend（Lint。CIと同じくwarningは失敗させない。warningも含めて確認したい場合は
-# 末尾に --deny-warnings を付ける）
-docker exec -w /workspace task-management-frontend npx oxlint
-
-# frontend（型チェック + ビルド）
-docker exec -w /workspace task-management-frontend npm run build
-```
+レビュー承認と同じく必須のステータスチェックには設定していませんが（現状1人開発のため）、マージ前に必ず結果を確認してください。

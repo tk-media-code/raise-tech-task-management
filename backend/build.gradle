@@ -67,10 +67,16 @@ spotbugs {
 	// 設定ファイル。理由はconfig/spotbugs/exclude.xmlのコメントを参照。
 	excludeFilter = file('config/spotbugs/exclude.xml')
 }
-// レポートをHTML形式でも出力する（既定のXML形式は機械可読だが人が読みにくいため）。
+// レポートをHTML・text形式でも出力する（既定のXML形式は機械可読だが人が読みにくいため）。
+// text形式を追加しているのは、push前チェック（scripts/quality-check.sh）が失敗時に
+// このファイルをコンテナ内から直接catして指摘内容をそのまま表示するため。
+// HTMLはブラウザでの閲覧向けで、この用途には向かない。
 tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
 	reports {
 		html {
+			required = true
+		}
+		text {
 			required = true
 		}
 	}
