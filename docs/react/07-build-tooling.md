@@ -176,3 +176,62 @@ className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 tex
 Tailwindは`md:`のような**ブレークポイント修飾子**をクラス名の前に付けることで、「画面幅がある条件を満たすときだけ」そのユーティリティを適用できます。既定のブレークポイントはいくつか用意されていますが、本プロジェクトで使っているのは`md`（`min-width: 768px`）だけです。`md:hidden`は「768px以上の画面幅では`display: none`にする」という意味で、逆に言えば768px未満（スマートフォン幅）でだけ表示される、ということになります。
 
 修飾子の付いていない素の`hidden`のようなクラスは常時（全ての画面幅で）適用されるため、`md:hidden`のように修飾子付きのクラスと組み合わせて初めて「ある画面幅**未満**でだけ表示する」という指定になります。逆に「768px以上でだけ表示する」なら、既定で`hidden`を指定したうえで`md:block`（や`md:flex`など、要素本来の`display`値）を付け足す、という書き方をします。`components/BoardDetailView.tsx`・`CrossBoardView.tsx`の`grid gap-4 md:grid-cols-3`（3列カンバンを768px未満では1列に、768px以上では3列にする）も同じ修飾子の仕組みで、こちらは既存のCSS（メディアクエリ）で言う`@media (min-width: 768px) { ... }`にちょうど対応します。
+
+---
+
+## 33. oxlintの設定強化
+
+実装が一通り完了した段階の品質チェックで、[9章](./03-state-effect.md#9-フックのルール)で触れた`.oxlintrc.json`を見直しました。導入直後は`react/rules-of-hooks`・`react/only-export-components`の2ルールしか明示的に有効にしておらず、oxlintが持つ検出力のごく一部しか使えていなかったためです。
+
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc", "jsx-a11y", "promise", "import"],
+  "categories": {
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }],
+    "react/react-in-jsx-scope": "off",
+    "import/no-unassigned-import": "off"
+  }
+}
+```
+
+### `categories`：ルールをまとめて有効にする
+
+oxlintのルールは`correctness`（既定で有効）・`suspicious`・`pedantic`・`perf`・`style`・`restriction`・`nursery`という7つのカテゴリに分類されています。個々のルールを1つずつ`rules`に書き並べる代わりに、`categories`でカテゴリ単位の重要度を指定できます。`"suspicious": "warn"`は「間違っている可能性が高いコード」のカテゴリを警告として有効にする設定です。
+
+### `plugins`：フレームワーク固有の検査を追加する
+
+素のJavaScript/TypeScriptだけでなく、Reactやアクセシビリティ（a11y）、Promiseの使い方など、特定のライブラリ・パターンに特化した検査を追加するのが`plugins`です。今回`jsx-a11y`（アクセシビリティ）・`promise`（Promiseの使い方）・`import`（import文の妥当性）の3つを追加しました。
+
+### 誤検知への対処：まず動かして確かめる
+
+`suspicious`カテゴリと3プラグインを機械的に足しただけでは、実装に合わない誤検知も一緒に増えてしまいます。実際に試したところ、次の2つが誤検知でした。
+
+| ルール | 誤検知の内容 |
+| --- | --- |
+| `react/react-in-jsx-scope` | 「JSXを使うファイルは`React`をimportしていなければならない」という、React 16以前のJSX変換方式を前提にしたルール。本プロジェクトは`tsconfig.app.json`の`"jsx": "react-jsx"`（React 17以降の新しいJSX変換）を使っており、`React`のimportが無くてもJSXは動く。有効にすると全てのJSXを含む行（実測236件）が誤って指摘される |
+| `import/no-unassigned-import` | 「importした結果を変数に代入していないimportは怪しい」というルール。`main.tsx`の`import './index.css'`はCSSを読み込むためだけのVite標準の書き方で、代入する対象が無いのが正しい |
+
+いずれも`.oxlintrc.json`の`rules`で個別に`"off"`にすることで、他の指摘に埋もれさせずに除外しています。`react-perf`プラグイン（`jsx-no-new-function-as-prop`等）は試した結果、コールバックpropsすべてに反応してノイズが大きく、このプロジェクトの規模には見合わないと判断し、そもそも導入していません。「カテゴリ・プラグインを追加したら、まず実行して結果を見る」という進め方が、oxlintに限らず静的解析ツール全般との付き合い方の基本です。
+
+### 実際に検出された指摘
+
+誤検知を除外した状態で残った指摘は次の8件でした（2026年8月時点。今後の対応は品質チェックの結果として別Issueで管理する方針としています）。
+
+| ルール | 内容 |
+| --- | --- |
+| `promise/always-return`（2件） | `hooks/useApi.ts`・`hooks/useLabelsByBoard.ts`の`.then()`が値を返していない |
+| `jsx-a11y/click-events-have-key-events`・`no-static-element-interactions`（各2件） | `components/CardDetailModal.tsx`・`BoardManageModal.tsx`の背景オーバーレイ`<div onClick>`に、キーボード操作の代替が無い |
+| `jsx-a11y/prefer-tag-over-role`（2件） | 同じ2箇所の`role="dialog"`は、意味の近いHTML標準要素`<dialog>`に置き換えられる |
+
+### `react/exhaustive-deps`は有効化できなかった
+
+[9章](./03-state-effect.md#9-フックのルール)で扱った`react/rules-of-hooks`と対になる、`useEffect`の依存配列漏れを検出する`react/exhaustive-deps`というルールも試しましたが、oxlintの設定ファイル（`categories`・`rules`のどちらの経由でも）有効化できないことを実機で確認しました。設定ファイルに`"react/exhaustive-deps": "warn"`を足しても、実行時に読み込まれるルール総数が変化しないためです。`pages/SearchView.tsx`・`components/SortableBoardRow.tsx`に残る`// eslint-disable-next-line react-hooks/exhaustive-deps`というコメント（ESLintからの移行時の名残）は、現状どのツールにも検証されないコメントになっています。
+
+### CIとの関係
+
+oxlintは既定で「`warn`扱いの指摘だけが残っている状態」を失敗として扱いません（終了コード0）。`--deny-warnings`オプションを付けると、この挙動を変えて`warn`扱いの指摘（`suspicious`カテゴリや上記8件を含む）もCIの失敗として扱えます。[CONTRIBUTING.md](../../CONTRIBUTING.md#5-ci自動チェック)の方針では、上記8件が解消されるまでの間はこのオプションを付けず、まずerror（`correctness`カテゴリ、現状0件）のみでゲートしています。指摘を1件ずつ解消し終えたら`--deny-warnings`を付け、以後の新しい警告もCIで検出できる状態へ引き上げる想定です。

@@ -56,14 +56,23 @@
 
 > **開発環境と本番環境の構成差について**: 上記は開発環境の構成です。実際には `docker-compose.yml` は開発専用（backend＋db。frontendは今後追加）とし、本番はサービスごとに `docker build` した単体イメージをデプロイする方針としています（backendは `backend/Dockerfile` を参照）。本番のDB接続先は、外部／マネージドなPostgresを環境変数（`DB_URL`等）で指す構成を想定しており、具体的な配線は今後の課題とします。
 
-### 9.4 必要に応じて導入する補助ツール（発展）
+### 9.4 品質チェックツール
 
-最小構成ではコア技術に集中し、以下は開発を進める中で必要になった段階で導入を検討します。
+開発を進める中で、以下を導入済みです。
+
+| ツール | 役割 |
+| --- | --- |
+| GitHub Actions（CI） | PRの作成・更新のたびに、backendのビルド・静的解析・テスト、frontendのLint・ビルドを自動実行する（[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-ci自動チェック)参照） |
+| Bean Validation | リクエストDTO（record）の入力値検証（[9-write-api-validation.md](../spring-boot/09-write-api-validation.md)参照） |
+| javac `-Xlint` / Checkstyle / SpotBugs | バックエンドの静的解析。順に「コンパイラ標準の警告」「ソースコードの見落とし検出」「バイトコードレベルのバグ検出」を担う（[02-build-config.md](../spring-boot/02-build-config.md)参照） |
+| oxlint | フロントエンドの静的解析（[frontend/.oxlintrc.json](../../frontend/.oxlintrc.json)）。ESLintではなくRust製の高速な代替を採用している |
+
+> **フォーマッタ（Prettier・Spotless等）は意図的に導入していません。** 既存コードは学習用の日本語コメントを多く含み書式が既に一貫しているため、一括整形が生む差分の大きさに見合うメリットが薄いと判断しました。
+
+以下は、開発を進める中で必要になった段階であらためて導入を検討します。
 
 - Flyway（DBスキーマのマイグレーション管理）
-- JUnit 5 / Spring Boot Test（バックエンドの自動テスト）
-- Bean Validation（入力値の検証）
-- ESLint / Prettier（フロントエンドのコード整形・静的解析）
+- JUnit 5 / Spring Boot Test・Vitest等を使った自動テストの拡充（現状バックエンドはSpring Bootの起動確認のみ、フロントエンドは未着手）
 
 > **現時点のスキーマ管理方式**: Flyway導入前の現段階では、JPAエンティティ（[7章](./04-data-model.md#7-データモデル)のBOARD/CARD/LABEL/CARD_LABEL）を唯一の情報源とし、`spring.jpa.hibernate.ddl-auto=update` でHibernateに開発DBのスキーマを自動生成させています。本番でこの値（`update`）を使うのは意図せぬスキーマ変更の危険があるため非推奨で、Flyway導入時にSQLファイルでスキーマをバージョン管理する方式へ置き換える想定です。
 

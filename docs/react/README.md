@@ -28,6 +28,7 @@
 | 22〜28章 | カードの編集とドラッグ＆ドロップ | [09-editing-and-drag-and-drop.md](./09-editing-and-drag-and-drop.md) |
 | 29〜30章 | ボード管理（改名・削除） | [10-board-management.md](./10-board-management.md) |
 | 31〜32章 | カードの完全削除 | [11-card-deletion.md](./11-card-deletion.md) |
+| 33章 | oxlintの設定強化 | [07-build-tooling.md](./07-build-tooling.md) |
 
 ## 目次
 
@@ -63,6 +64,7 @@
 30. [削除と`key`による再マウント](./10-board-management.md#30-削除とkeyによる再マウント)
 31. [2つ目の削除機能——`useDelete`と`window.confirm`の再利用](./11-card-deletion.md#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)
 32. [影響範囲の見極め——なぜ`dataVersion`が要らないのか](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
+33. [oxlintの設定強化](./07-build-tooling.md#33-oxlintの設定強化)
 
 ---
 
@@ -319,6 +321,14 @@
 カードの完全削除では、ボード削除で必要だった`<Routes key={dataVersion}>`（30章）による全体再マウントが不要になります。「アーカイブ済みのカードのみ削除できる」という業務ルールが、削除の影響範囲をアーカイブ画面1枚に閉じ込めているためです。サーバー側の制約がフロントエンドの状態管理をどれだけ単純にするかという視点、楽観的更新をしない原則（19章）をここでも踏襲する理由を扱います。
 
 📄 詳細：[11-card-deletion.md](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
+
+---
+
+## 33. oxlintの設定強化
+
+品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。`react/exhaustive-deps`が設定ファイル経由でも有効化できないことを実機で確認した結果や、実際に検出された8件の指摘も扱います。
+
+📄 詳細：[07-build-tooling.md](./07-build-tooling.md#33-oxlintの設定強化)
 
 ---
 

@@ -27,8 +27,10 @@
 ```groovy
 plugins {
 	id 'java'
+	id 'checkstyle'
 	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.github.spotbugs' version '6.5.10'
 }
 
 group = 'com.tkmedia'
@@ -62,7 +64,7 @@ tasks.named('test') {
 
 | ブロック | 意味 |
 | --- | --- |
-| `plugins { }` | このビルドに適用する機能拡張（プラグイン）。`java`はJavaのコンパイル機能そのもの、`org.springframework.boot`はSpring Boot用のタスク（`bootRun`・`bootJar`等）を追加し依存バージョンの管理も担う、`io.spring.dependency-management`はSpring Boot対応ライブラリのバージョンを一括管理する機能を追加する |
+| `plugins { }` | このビルドに適用する機能拡張（プラグイン）。`java`はJavaのコンパイル機能そのもの、`checkstyle`・`com.github.spotbugs`は静的解析（[43章](#43-静的解析ツールの導入)で解説）、`org.springframework.boot`はSpring Boot用のタスク（`bootRun`・`bootJar`等）を追加し依存バージョンの管理も担う、`io.spring.dependency-management`はSpring Boot対応ライブラリのバージョンを一括管理する機能を追加する |
 | `group` / `version` | このプロジェクトの識別名とバージョン。Mavenのartifact座標に相当する |
 | `java { toolchain { ... } }` | ビルド・実行に使うJavaのバージョンをプロジェクト単位で固定する設定。ここでは25を指定しているため、開発者のPCにインストールされているJavaのバージョンによらず、Gradleが指定バージョンのJDKを解決して使う |
 | `repositories { mavenCentral() }` | 依存ライブラリをダウンロードしてくる先。`mavenCentral()`は最も標準的な公開リポジトリ |
@@ -145,7 +147,7 @@ spring.mvc.problemdetails.enabled=true
 ここでは、ファイル内のコメントで触れられている用語を補足します。
 
 - **`${DB_URL}`のようなプレースホルダ**：`application.properties`は、OSの環境変数を`${変数名}`の形で埋め込めます。本プロジェクトでは、ルートの`docker-compose.yml`が`.env`の値を読み取り、`backend`コンテナに環境変数として渡し、それをこのファイルが参照する、という流れになっています。
-- **`spring.jpa.hibernate.ddl-auto=update`**：Hibernateに「エンティティクラスの定義を正としてDBスキーマを自動的に作る／更新する」よう指示する設定です。開発中は手軽ですが、本番運用では意図しないカラム変更が起きうるため非推奨とされ、将来的にはFlyway（SQLファイルでスキーマ変更を管理するマイグレーションツール）に置き換える計画です（[要件定義9.4](../requirements/05-tech-stack-and-roadmap.md#94-必要に応じて導入する補助ツール発展)）。
+- **`spring.jpa.hibernate.ddl-auto=update`**：Hibernateに「エンティティクラスの定義を正としてDBスキーマを自動的に作る／更新する」よう指示する設定です。開発中は手軽ですが、本番運用では意図しないカラム変更が起きうるため非推奨とされ、将来的にはFlyway（SQLファイルでスキーマ変更を管理するマイグレーションツール）に置き換える計画です（[要件定義9.4](../requirements/05-tech-stack-and-roadmap.md#94-品質チェックツール)）。
 - **`management.endpoint.health.show-details=never`**：`spring-boot-starter-actuator`が提供する`/actuator/health`エンドポイントの詳細表示レベルの設定です。`never`は`{"status":"UP"}`のみを返す最も安全な既定値で、全環境共通の設定としてあえてこれを明示しています。開発中にDB接続状況などの詳細を見たい場合は、環境ごとにプロファイルを分けて上書きします（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)で解説）。
 - **`spring.jpa.open-in-view=false`**：Repository・Service・Controllerを実装した際（[17〜23章](./05-repository.md)）に追加した設定です。詳しい経緯は[25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界)を参照してください。
 - **`spring.mvc.problemdetails.enabled=true`**：例外処理を実装した際（[23章](./06-service-controller.md#23-例外処理とrestcontrolleradvice)）に追加した設定です。自前の`@RestControllerAdvice`が返す404と、Spring MVCが自前で処理する400などのエラー形式を統一します。
@@ -195,6 +197,87 @@ curl -s -i http://localhost:8080/api/boards/999
 ```
 
 開発環境では`logging.level.org.hibernate.SQL=debug`（[16章](./04-profiles.md#16-環境ごとの設定切り替えプロファイル)と同様、`application-dev.properties`限定の設定）によりSQLログが出力されるため、`docker compose logs -f backend`で追いながらリクエストを送ると、実際に発行されているSQLの本数・内容を確認できます。これはN+1問題（[24章](./07-jpa-performance.md#24-n1問題とその回避)）が起きていないことの実地確認として重要です。
+
+---
+
+## 43. 静的解析ツールの導入
+
+これまでの章で実装したAPIが一通り揃った段階で、**コンパイルが通ることと「動くこと」だけでは見落とす類の問題**（未使用のimport、nullになり得る値への注意不足など）を機械的に検出するため、3種類の静的解析を`build.gradle`へ追加しました。いずれも既存コードの書式（インデント幅など）には踏み込まない、「実質的な誤り・見落とし」だけを検出する構成にしています。フォーマッタ（Prettier/Spotless相当）は導入していません。理由は[要件定義9.4](../requirements/05-tech-stack-and-roadmap.md#94-品質チェックツール)を参照してください。
+
+### 43.1 `-Xlint:all`（javac標準の追加警告）
+
+```groovy
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs << '-Xlint:all'
+}
+```
+
+`javac`自体が持つ追加警告をすべて有効にする設定です。外部ライブラリを追加する必要がなく、コンパイルのたびに実行されるため、3つの中で最も手軽に導入できます。実行してみると、本プロジェクトの現状では次の4件が検出されました（未対応。品質チェックの結果として別Issueで管理する方針としています）。
+
+| 警告の種類 | 検出箇所 | 内容 |
+| --- | --- | --- |
+| `[serial]` | `ResourceNotFoundException` / `InvalidRequestException` / `CardLabelId` | `Serializable`を実装・継承しているクラスに`serialVersionUID`が定義されていない |
+| `[deprecation]` | `Card`エンティティの`@Check`アノテーション | `org.hibernate.annotations.Check`がHibernateの新しいバージョンで非推奨になっている |
+
+`-Werror`（警告をエラー扱いにしてビルドを失敗させる設定）は付けていません。上記の警告が残ったままだと`./gradlew build`自体が通らなくなってしまうためです。
+
+### 43.2 SpotBugs（bytecodeレベルのバグ検出）
+
+```groovy
+spotbugs {
+	toolVersion = '4.10.3'
+	effort.set(com.github.spotbugs.snom.Effort.valueOf('MAX'))
+	reportLevel.set(com.github.spotbugs.snom.Confidence.valueOf('DEFAULT'))
+	excludeFilter = file('config/spotbugs/exclude.xml')
+}
+```
+
+Checkstyleが**ソースコードの文字列**を見て検査するのに対し、SpotBugsは**コンパイル後のbytecode**を解析します。そのため、ソースだけを見ていては気づきにくい「実行時にNullPointerExceptionを起こしうる箇所」のような、より実質的なバグ検出が得意です。
+
+> **`effort.set(...)` / `reportLevel.set(...)`という書き方について**：SpotBugs Gradle Pluginの`effort`・`reportLevel`は文字列（`'max'`など）を代入する書き方もできますが、Gradle 10で廃止予定の非推奨機能（文字列→enum定数への暗黙変換）に依存してしまうため、ここでは`Effort.valueOf('MAX')`のようにenum定数を明示的に取得してから`.set()`で渡しています。
+
+導入時、実際にJava 25（class file version 69）のbytecodeを解析できるかを検証しました。結果、`EI_EXPOSE_REP` / `EI_EXPOSE_REP2`（「getter/setter/コンストラクタがミュータブルなフィールドをそのまま受け渡ししている」ことへの指摘）が21件検出されましたが、いずれもJPAエンティティの`@ManyToOne`関連やDTOの`record`という、本プロジェクトの設計上ごく普通のパターンでした。防御的コピーを加えると設計がかえって複雑になるため、`config/spotbugs/exclude.xml`で除外しています（除外の理由はそのファイル自身のコメントに詳しく書いています）。この2つを除外した状態では、他の指摘は0件でした。
+
+レポートは`backend/build/reports/spotbugs/main.html`（HTML形式、人が読みやすい）に出力されます。
+
+### 43.3 Checkstyle（ソースコードの見落とし検出）
+
+```groovy
+checkstyle {
+	toolVersion = '13.9.0'
+	sourceSets = [sourceSets.main]
+}
+```
+
+検査項目は`backend/config/checkstyle/checkstyle.xml`で定義しています。Checkstyleの配布物にはGoogle/Sunの既定ルールセット（`google_checks.xml`・`sun_checks.xml`）が同梱されていますが、それらはインデント幅・命名規則など**書式**に踏み込む項目を大量に含んでおり、本プロジェクトが採用しているタブインデントと衝突するため採用していません。代わりに、書式に関係しない項目だけを個別に選んでいます。
+
+| 検査項目 | 検出する内容 |
+| --- | --- |
+| `UnusedImports` | 使われていないimport文 |
+| `RedundantImport` | 重複・不要なimport文 |
+| `EqualsHashCode` | `equals()`だけ（または`hashCode()`だけ）をオーバーライドしている |
+| `MissingSwitchDefault` | switch文に`default`節が無い |
+| `FallThrough` | switch文のcaseからのフォールスルー（`break`忘れ） |
+| `SimplifyBooleanExpression` | `if (a == true)`のような冗長なboolean比較 |
+| `EmptyBlock` | 中身が空のブロック（catch節の握りつぶし等） |
+| `NeedBraces` | if/for/while等で波括弧を省略した1行記法 |
+| `StringLiteralEquality` | `==`/`!=`による文字列比較（本来`equals()`を使うべき箇所） |
+| `IllegalImport` | `javax.*`パッケージ、および`jakarta.transaction.Transactional`のimport。後者は[20章](./06-service-controller.md#20-service層とtransactional)・`BoardService`のクラスコメントで触れている「`readOnly`属性を持たない、よく似た別のアノテーション」で、間違えてもコンパイルは通ってしまう落とし穴のため機械的に検出する |
+
+テストコード（`src/test`）は対象外にしています（現状`TaskManagementApplicationTests`という空のスモークテストのみで、検査から得られる価値が薄いため）。
+
+### 43.4 実行方法
+
+```bash
+# 3つすべて（+コンパイル+既存テスト）をまとめて実行
+./gradlew check
+
+# 個別に実行したい場合
+./gradlew checkstyleMain
+./gradlew spotbugsMain
+```
+
+これらは[CONTRIBUTING.md](../../CONTRIBUTING.md#5-ci自動チェック)の方針により、PRを作成・更新するたびにGitHub Actionsでも自動実行されます。
 
 ---
 

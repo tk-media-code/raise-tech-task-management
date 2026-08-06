@@ -9,6 +9,7 @@
 2. [ブランチ運用](#2-ブランチ運用)
 3. [Pull Requestの作成とマージ](#3-pull-requestの作成とマージ)
 4. [GitHub側の保護設定](#4-github側の保護設定)
+5. [CI（自動チェック）](#5-ci自動チェック)
 
 ---
 
@@ -110,3 +111,34 @@ git branch -d feature/<issue番号>-<内容>
 | マージ後の自動削除 | PRマージ時、リモートの作業ブランチを自動削除 |
 
 管理者を含め、誰も `main` へ直接pushすることはできません。緊急時も、必ずPRを経由してください。
+
+---
+
+## 5. CI（自動チェック）
+
+`main` へのPRを作成・更新すると、GitHub Actions（[`.github/workflows/ci.yml`](./.github/workflows/ci.yml)）が自動的に以下を検査します。コンパイルが通らない・型エラーがある・静的解析で問題が見つかったコードにレビュアーが気付けないままマージされることを防ぐためのものです。
+
+| job | 内容 |
+| --- | --- |
+| backend | `./gradlew build`（コンパイル + Checkstyle + SpotBugs + 既存のスモークテスト）。PostgreSQLコンテナをGitHub Actions上に一時的に起動し、DB接続を要する`TaskManagementApplicationTests`を実際に走らせる |
+| frontend | `npx oxlint`（Lint）+ `npm run build`（`tsc -b`による型チェック + Viteビルド） |
+
+レビュー承認と同じく必須のステータスチェックには設定していませんが（現状1人開発のため）、マージ前に必ず結果を確認してください。失敗した場合、backendのCheckstyle/SpotBugsレポートはワークフローの実行結果からArtifactとしてダウンロードできます。
+
+> **frontendのLintは現時点で`--deny-warnings`を付けていません。** `.oxlintrc.json`強化時の品質チェックで検出したsuspicious/jsx-a11y/promiseの指摘（8件、別Issueで管理）がwarning扱いで残っているため、それらを解消するまではerror（correctnessカテゴリ）のみでCIをゲートする段階的な運用にしています。解消後に`--deny-warnings`を付けてwarningもCI失敗の対象にする想定です。
+
+### ローカルで事前に確認する
+
+PRを作成する前に、ローカル（Dockerコンテナ内）で同じチェックを実行できます。backendはJava 25のtoolchainを要求するため、ホストのJavaバージョンに関わらずコンテナ内で実行してください。
+
+```bash
+# backend（コンパイル + Checkstyle + SpotBugs + テスト）
+docker exec -w /workspace task-management-backend ./gradlew check
+
+# frontend（Lint。CIと同じくwarningは失敗させない。warningも含めて確認したい場合は
+# 末尾に --deny-warnings を付ける）
+docker exec -w /workspace task-management-frontend npx oxlint
+
+# frontend（型チェック + ビルド）
+docker exec -w /workspace task-management-frontend npm run build
+```
