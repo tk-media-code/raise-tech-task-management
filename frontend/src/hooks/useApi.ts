@@ -80,23 +80,29 @@ export function useApi<T>(path: string | null): UseApiResult<T> {
     setError(null)
     setData(null)
 
-    fetchJson<T>(path, controller.signal)
-      .then((json) => {
-        setData(json)
-      })
-      .catch((cause: unknown) => {
+    // useEffectのコールバック自体はasyncにできない。asyncな関数は必ずPromiseを返すが、
+    // useEffectの戻り値は「後片付け関数」か「undefined」でなければならないため
+    // （Promiseを返すとReactがそれを後片付け関数と誤認する）。そのため、内部に
+    // 即時実行のasync関数を1つ置いて、その中でawaitする。
+    // voidを付けているのは「このPromiseの結果は使わない」という意思表示。
+    void (async () => {
+      try {
+        setData(await fetchJson<T>(path, controller.signal))
+      } catch (cause: unknown) {
         // 中断（abort）は「呼び出し側が意図してやめた」だけで、ユーザーに見せる失敗ではない。
         // signal.abortedを見るのは、err.nameを見るより確実なため
-        // （fetchが解決した直後・thenの実行前に中断されたケースも拾える）。
+        // （fetchが解決した直後・setDataの実行前に中断されたケースも拾える）。
         if (controller.signal.aborted) return
         setError(cause instanceof Error ? cause : new Error(String(cause)))
-      })
-      .finally(() => {
+      } finally {
         // 中断された実行でloadingをfalseに倒すと、後続の新しい実行が立てたloading=trueを
         // 打ち消してしまう。ここでも中断チェックが要る。
-        if (controller.signal.aborted) return
-        setLoading(false)
-      })
+        // catch側と違いreturnではなくifで囲うのは、finallyの中のreturnがcatchのreturnを
+        // 上書きしてしまうというJavaScriptの落とし穴を避けるため（ここでは戻り値を
+        // 使っていないので実害は無いが、紛らわしい書き方をしない）。
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    })()
 
     // useEffectが返した関数＝後片付け（クリーンアップ）。Reactは
     //   (1) 依存配列の値が変わって効果を実行し直す直前

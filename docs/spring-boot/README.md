@@ -256,7 +256,7 @@ Java の`record`を使ったDTOの書き方と、エンティティをAPIレス�
 
 ## 23. 例外処理と`@RestControllerAdvice`
 
-`@RestControllerAdvice`による例外処理の一元化と、RFC 9457に沿った`ProblemDetail`でのエラーレスポンスの返し方を解説します。
+`@RestControllerAdvice`による例外処理の一元化と、RFC 9457に沿った`ProblemDetail`でのエラーレスポンスの返し方を解説します。想定外の例外を受け止めるフォールバックを**別クラスに分けて`@Order(LOWEST_PRECEDENCE)`にした理由**——同じクラスに置くとフレームワーク由来の404・400まで500に化けてしまう——と、500では例外メッセージをクライアントへ返さない理由も扱います。
 
 📄 詳細：[06-service-controller.md](./06-service-controller.md#23-例外処理とrestcontrolleradvice)
 
