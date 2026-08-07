@@ -1,32 +1,49 @@
-# React + TypeScript + Vite
+# frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+タスク管理アプリのフロントエンド（React + TypeScript + Vite + Tailwind CSS）です。
 
-Currently, two official plugins are available:
+プロジェクト全体の概要・起動方法は[ルートの README.md](../README.md) を参照してください。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 起動
 
-## React Compiler
+通常は Docker Compose 経由で起動します。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+docker compose up -d   # リポジトリルートで実行 → http://localhost:5173
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+dev server はコンテナ内で動いており、ソースを編集すると HMR（ホットリロード）で即座に画面へ反映されます。ホストに Node.js をインストールする必要はありません。
+
+## ディレクトリ構成
+
+| パス | 役割 |
+| --- | --- |
+| `src/pages/` | URLに対応する画面コンポーネント（`App.tsx` の `<Routes>` から参照される） |
+| `src/components/` | 画面をまたいで使う部品（カード・モーダル・フォームなど） |
+| `src/hooks/` | カスタムフック（`useApi`・`useMutation`・ドラッグ＆ドロップなど） |
+| `src/api/` | APIのパス定義と `fetch` のラッパー |
+| `src/lib/` | ステータス・ラベル色・期日判定など、UIに依存しない小さなロジック |
+| `src/types/` | バックエンドのDTOに対応する型定義 |
+
+## 静的解析
+
+[oxlint](https://oxc.rs) を使っています（ESLintは導入していません）。設定は `.oxlintrc.json` です。
+
+```bash
+npx oxlint src/          # このディレクトリ単体で確認する場合
+bash scripts/quality-check.sh   # 通常はこちら（リポジトリルートで実行）
+```
+
+push前には `scripts/quality-check.sh` の実行が必要です。backend/frontend 両方のチェックがこのスクリプト1本に集約されているため、個別のコマンドを直接叩くのではなくこちらを使ってください（詳細は [CONTRIBUTING.md 5章](../CONTRIBUTING.md#5-push前の品質チェック)）。
+
+### まだ有効化していないもの
+
+- **type-aware ルール**：`oxlint-tsgolint` を追加して `.oxlintrc.json` に `"options": { "typeAware": true }` を書くと、型情報を使った検査（未使用のPromiseの検出など）が有効になります。実行時間とのトレードオフがあるため、現時点では見送っています。
+- **React Compiler**：ビルド性能への影響があるため未導入です。導入する場合は[公式ドキュメント](https://react.dev/learn/react-compiler/installation)を参照してください。
+
+## 学習ドキュメント
+
+実装の設計判断や、登場する概念の解説は以下にまとめています。
+
+- [docs/react/](../docs/react/README.md) — React・React Router・Vite・Tailwind CSS の使い方と、本プロジェクトでの設計判断
+- [docs/typescript/](../docs/typescript/README.md) — TypeScript言語の文法（ジェネリクス・ユニオン型・非同期処理など）
