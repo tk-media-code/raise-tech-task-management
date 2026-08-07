@@ -99,6 +99,16 @@ export function groupCardsByStatusAndBoard(
 }
 
 /**
+ * 横断ビューの1ステータスぶんのボード別セクション一覧から、カードの合計件数を数える。
+ * StatusColumnの列見出し（例:「未着手 (2)」）とMobileStatusTabsのタブラベル
+ * （components/MobileStatusTabs.tsx、要件8.1）が同じ数を表示する必要があるため、
+ * 元は呼び出し側（CrossBoardView.tsx）で個別にreduceしていた計算をここへ集約した。
+ */
+export function countCardsInGroups(groups: BoardGroup[]): number {
+  return groups.reduce((sum, group) => sum + group.cards.length, 0)
+}
+
+/**
  * フラットなカード配列を「ステータス → カード」の2階層に組み替える（ボード詳細画面用）。
  * 単一ボードの画面ではボード別セクションが不要なので、こちらを使う。
  */

@@ -31,6 +31,7 @@
 | 33章 | oxlintの設定強化 | [07-build-tooling.md](./07-build-tooling.md) |
 | 34章 | ネイティブ`<dialog>`とモーダルのアクセシビリティ | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 | 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
+| 36章 | ARIAタブパターンによるモバイル向けステータス切り替え | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 
 ## 目次
 
@@ -69,6 +70,7 @@
 33. [oxlintの設定強化](./07-build-tooling.md#33-oxlintの設定強化)
 34. [ネイティブ`<dialog>`とモーダルのアクセシビリティ](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
 35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
+36. [ARIAタブパターンによるモバイル向けステータス切り替え](./12-dialog-accessibility.md#36-ariaタブパターンによるモバイル向けステータス切り替え)
 
 ---
 
