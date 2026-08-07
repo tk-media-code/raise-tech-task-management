@@ -29,6 +29,7 @@
 | 33〜39章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
 | 40〜42章 | 削除API（DELETE）・DBレベルのカスケード削除・状態に依存する削除可否 | [11-delete-api.md](./11-delete-api.md) |
 | 43章 | 静的解析ツールの導入（-Xlint・SpotBugs・Checkstyle） | [02-build-config.md](./02-build-config.md) |
+| 44章 | 自動テスト（JUnit 5・Mockito・MockMvc） | [12-testing.md](./12-testing.md) |
 
 ## 目次
 
@@ -75,6 +76,7 @@
 41. [物理削除とDBレベルのON DELETE CASCADE](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
 42. [削除の可否を状態で決める——「在るか」だけでは足りないとき](./11-delete-api.md#42-削除の可否を状態で決める在るかだけでは足りないとき)
 43. [静的解析ツールの導入](./02-build-config.md#43-静的解析ツールの導入)
+44. [自動テスト：業務ルールをコードで守る](./12-testing.md#44-自動テスト業務ルールをコードで守る)
 
 ---
 
@@ -419,6 +421,14 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 コンパイルが通ることと「動くこと」だけでは見落とす問題を機械的に検出するため、`-Xlint:all`（javac標準）・SpotBugs（bytecodeレベルのバグ検出）・Checkstyle（ソースコードの見落とし検出）の3つを導入しました。Google/Sunの既定ルールセットは書式（インデント等）に踏み込みすぎるため採用せず、書式に関係しない検査項目だけを選んでいます。SpotBugsがJava 25のbytecodeを解析できるかの検証結果や、JPAエンティティ・DTO recordで大量に検出された`EI_EXPOSE_REP`系を除外した理由も扱います。
 
 📄 詳細：[02-build-config.md](./02-build-config.md#43-静的解析ツールの導入)
+
+---
+
+## 44. 自動テスト：業務ルールをコードで守る
+
+「壊れても画面はそれらしく動いてしまう」業務ルール（アーカイブ可否・削除可否・positionの振り直しなど）を、手動の`curl`確認からテストコードへ移しました。Testcontainersを使えない環境（コンテナ内からDocker socketが見えない）で何ならできるかを考え、Mockitoによる Service層の単体テストと、`@WebMvcTest`によるController層のスライステストという、DBに依存しない2層から始めています。`@InjectMocks`がコンストラクタインジェクションの利点をそのまま利用していること、`verify(never())`で「呼ばれなかったこと」＝検証の順序という設計判断を守れること、そして**わざと実装を壊して狙ったテストだけが赤くなるか**を確かめた結果も扱います。
+
+📄 詳細：[12-testing.md](./12-testing.md#44-自動テスト業務ルールをコードで守る)
 
 ---
 
