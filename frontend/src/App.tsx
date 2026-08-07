@@ -7,6 +7,7 @@ import { useApi } from './hooks/useApi'
 import ArchiveView from './pages/ArchiveView'
 import CrossBoardView from './pages/CrossBoardView'
 import BoardDetailView from './pages/BoardDetailView'
+import NotFoundView from './pages/NotFoundView'
 import SearchView from './pages/SearchView'
 import type { BoardResponse } from './types/api'
 
@@ -25,6 +26,8 @@ import type { BoardResponse } from './types/api'
  * 状態をここへ引き上げた（詳しい経緯はcomponents/BoardSelect.tsxのdocblock参照）。
  *
  * ルート構成は要件定義（docs/requirements/03-screens.md 6章）の画面遷移に対応する。
+ * これら4つに加え、どのpathにも一致しなかったURLを受け止める404ルート
+ * （pages/NotFoundView.tsx）を末尾に置いている。
  */
 function App() {
   const { data: boards, loading: boardsLoading, error: boardsError, refetch: refetchBoards } =
@@ -127,6 +130,10 @@ function App() {
           <Route path="/boards/:boardId" element={<BoardDetailView />} />
           <Route path="/search" element={<SearchView />} />
           <Route path="/archive" element={<ArchiveView />} />
+          {/* 上のどれにも一致しなかったURLの受け皿。path="*"は必ず最後に置く
+              （<Routes>は一致した最初の1つだけを描画するため、先頭に書くと
+              すべてのURLがここで止まってしまう）。 */}
+          <Route path="*" element={<NotFoundView />} />
         </Routes>
       </main>
 
