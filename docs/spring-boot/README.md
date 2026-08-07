@@ -304,7 +304,7 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 
 ## 29. リクエストDTOとBean Validation
 
-`spring-boot-starter-validation`の導入と、`@NotNull`・`@NotBlank`・`@Size`によるリクエストDTOの検証を解説します。レスポンスDTO（22章）との性格の違い、フォームの`disabled`→Bean Validation→DBの制約という3層の多重防御の考え方も扱います。
+`spring-boot-starter-validation`の導入と、`@NotNull`・`@NotBlank`・`@Size`によるリクエストDTOの検証を解説します。レスポンスDTO（22章）との性格の違い、フォームの`disabled`→Bean Validation→DBの制約という3層の多重防御の考え方も扱います。あわせて、DBのカラム長に由来する`title`の上限が3層で守られるのに対し、業務上の判断として決めた`description`の上限が2層で足りる理由——制約の「出どころ」の違い——も扱います。
 
 📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#29-リクエストdtoとbean-validation)
 

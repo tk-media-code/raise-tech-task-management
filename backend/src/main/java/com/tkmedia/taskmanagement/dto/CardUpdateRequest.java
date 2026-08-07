@@ -34,7 +34,10 @@ import java.util.List;
 // コンパクトコンストラクタには書かず、CardService側に集約する。
 public record CardUpdateRequest(
 		@NotBlank(message = "タイトルを入力してください") @Size(max = 200, message = "タイトルは200文字以内で入力してください") String title,
-		String description,
+		// 上限値と、titleとで @Size の根拠が異なる理由はCardCreateRequestのコメント参照。
+		// 作成時と編集時で許される長さが違うと「作れたのに保存し直せない」カードが生まれるため、
+		// 両DTOで必ず同じ値を使う。
+		@Size(max = 2000, message = "説明は2000文字以内で入力してください") String description,
 		LocalDate dueDate,
 		List<Integer> labelIds) {
 }

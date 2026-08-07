@@ -353,6 +353,10 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   rows={4}
+                  // バックエンドのDTO（CardUpdateRequestの@Size(max = 2000)）と同じ値。
+                  // タイトルのmaxLength={200}と同じ考え方で、送信してから400で弾かれるより
+                  // 入力の時点で打ち止めにする。
+                  maxLength={2000}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
