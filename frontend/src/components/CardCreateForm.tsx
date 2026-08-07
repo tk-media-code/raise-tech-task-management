@@ -131,6 +131,10 @@ function CardCreateForm({ boardId, onCreated }: Props) {
         placeholder="説明・メモ（任意）"
         aria-label="説明・メモ"
         rows={3}
+        // 上のtitleのmaxLength={200}と同じく、バックエンドのDTO（CardCreateRequestの
+        // @Size(max = 2000)）と同じ値。超過分は入力の時点で打ち止めになるため、
+        // 通常の操作でこの制限に起因する400が返ることはない。
+        maxLength={2000}
         className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
       />
       <input

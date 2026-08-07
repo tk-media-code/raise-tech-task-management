@@ -30,14 +30,16 @@ import java.util.List;
 // （締切を過ぎたタスクをそのまま記録しておきたい場合など）。バリデーションは「形式として不正」な
 // 値だけを弾き、「業務上あり得なくはない」値を弾かないようにする。
 //
-// descriptionに @Size を付けていない理由:
-// エンティティ側もtext型（長さ制限なし）であり、要件定義にも上限の規定がない。
-// titleにだけ @Size(max = 200) を付けているのは、Card.titleがvarchar(200)というDBの実カラム長に
-// 対応させるため（超過した場合にDBのエラーではなく、フィールドを名指しした400を返せるようにする）。
+// titleとdescriptionで @Size の根拠が異なる:
+// titleの200文字は、Card.titleがvarchar(200)というDBの実カラム長に対応させたもの
+// （超過した場合にDBのエラーではなく、フィールドを名指しした400を返せるようにする）。
+// 一方descriptionのDBカラムはtext型で長さ制限が無いため、2000文字はDB由来ではなく
+// 「個人のタスクメモとして妥当な範囲」として決めた業務上の上限。要件定義に規定が無いため、
+// 際限なく長い本文がそのまま保存されてしまう状態を避けることを目的にしている。
 public record CardCreateRequest(
 		@NotNull(message = "ボードを指定してください") Integer boardId,
 		@NotBlank(message = "タイトルを入力してください") @Size(max = 200, message = "タイトルは200文字以内で入力してください") String title,
-		String description,
+		@Size(max = 2000, message = "説明は2000文字以内で入力してください") String description,
 		LocalDate dueDate,
 		List<Integer> labelIds) {
 }
