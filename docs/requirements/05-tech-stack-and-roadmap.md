@@ -54,7 +54,7 @@
 
 ベーシック認証（[8.2](./02-requirements.md#82-認証セキュリティ)）は本番デプロイ時に前段のWebサーバー／ホスティング層で設定するものであり、上記3コンテナの構成には含まれません。
 
-> **開発環境と本番環境の構成差について**: 上記は開発環境の構成です。実際には `docker-compose.yml` は開発専用（backend＋db。frontendは今後追加）とし、本番はサービスごとに `docker build` した単体イメージをデプロイする方針としています（backendは `backend/Dockerfile` を参照）。本番のDB接続先は、外部／マネージドなPostgresを環境変数（`DB_URL`等）で指す構成を想定しており、具体的な配線は今後の課題とします。
+> **開発環境と本番環境の構成差について**: 上記は本番相当の構成です。開発環境の `docker-compose.yml` は frontend・backend・db に加え、DBの中身をブラウザから確認するための開発用GUI（CloudBeaver）を含む4サービス構成になっています。本番はサービスごとに `docker build` した単体イメージをデプロイする方針で、backendは本番用の `backend/Dockerfile` を用意済みです（frontendの本番用Dockerfileは今後整備）。本番のDB接続先は、外部／マネージドなPostgresを環境変数（`DB_URL`等）で指す構成を想定しており、具体的な配線は今後の課題とします。
 
 ### 9.4 品質チェックツール
 
@@ -67,13 +67,15 @@
 | Bean Validation | リクエストDTO（record）の入力値検証（[9-write-api-validation.md](../spring-boot/09-write-api-validation.md)参照） |
 | javac `-Xlint` / Checkstyle / SpotBugs | バックエンドの静的解析。順に「コンパイラ標準の警告」「ソースコードの見落とし検出」「バイトコードレベルのバグ検出」を担う（[02-build-config.md](../spring-boot/02-build-config.md)参照） |
 | oxlint | フロントエンドの静的解析（[frontend/.oxlintrc.json](../../frontend/.oxlintrc.json)）。ESLintではなくRust製の高速な代替を採用している |
+| JUnit 5 / Mockito | バックエンドのService層・Controller層の自動テスト（`CardServiceTest`・`BoardServiceTest`・`CardControllerTest`等）。Repository層のJPQLクエリやE2E/結合テストは対象外（[12-testing.md](../spring-boot/12-testing.md)参照） |
+| Vitest / Testing Library | フロントエンドのコンポーネント・カスタムフックの自動テスト。現状は`CardCreateForm`・`useApi`・`useMutation`・`useDebouncedValue`の4ファイルに限定（[13-frontend-testing.md](../react/13-frontend-testing.md)参照） |
 
 > **フォーマッタ（Prettier・Spotless等）は意図的に導入していません。** 既存コードは学習用の日本語コメントを多く含み書式が既に一貫しているため、一括整形が生む差分の大きさに見合うメリットが薄いと判断しました。
 
 以下は、開発を進める中で必要になった段階であらためて導入を検討します。
 
 - Flyway（DBスキーマのマイグレーション管理）
-- JUnit 5 / Spring Boot Test・Vitest等を使った自動テストの拡充（現状バックエンドはSpring Bootの起動確認のみ、フロントエンドは未着手）
+- 自動テストのさらなる拡充（Repository層のクエリ検証、E2E/結合テストなど。現状はバックエンドのService層・Controller層、フロントエンドは一部のコンポーネント・カスタムフックが中心）
 
 > **現時点のスキーマ管理方式**: Flyway導入前の現段階では、JPAエンティティ（[7章](./04-data-model.md#7-データモデル)のBOARD/CARD/LABEL/CARD_LABEL）を唯一の情報源とし、`spring.jpa.hibernate.ddl-auto=update` でHibernateに開発DBのスキーマを自動生成させています。本番でこの値（`update`）を使うのは意図せぬスキーマ変更の危険があるため非推奨で、Flyway導入時にSQLファイルでスキーマをバージョン管理する方式へ置き換える想定です。
 
