@@ -326,7 +326,7 @@
 
 ## 33. oxlintの設定強化
 
-品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。`react/exhaustive-deps`が設定ファイル経由でも有効化できないことを実機で確認した結果や、実際に検出された8件の指摘も扱います。
+品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。実際に検出された8件の指摘に加え、当初「有効化できない」と結論づけた`exhaustive-deps`が、実はプラグイン名の誤り（`react/`ではなく`react-hooks/`）だったという後日談も扱います。存在しないルール名なら設定の読み込み自体が失敗するという、気づけたはずの手がかりを見落としていた経緯も残しています。
 
 📄 詳細：[07-build-tooling.md](./07-build-tooling.md#33-oxlintの設定強化)
 

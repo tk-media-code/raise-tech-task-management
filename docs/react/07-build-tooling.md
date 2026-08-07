@@ -228,9 +228,44 @@ oxlintのルールは`correctness`（既定で有効）・`suspicious`・`pedant
 | `jsx-a11y/click-events-have-key-events`・`no-static-element-interactions`（各2件） | `components/CardDetailModal.tsx`・`BoardManageModal.tsx`の背景オーバーレイ`<div onClick>`に、キーボード操作の代替が無い |
 | `jsx-a11y/prefer-tag-over-role`（2件） | 同じ2箇所の`role="dialog"`は、意味の近いHTML標準要素`<dialog>`に置き換えられる |
 
-### `react/exhaustive-deps`は有効化できなかった
+### `exhaustive-deps`——ルール名が違っただけだった
 
-[9章](./03-state-effect.md#9-フックのルール)で扱った`react/rules-of-hooks`と対になる、`useEffect`の依存配列漏れを検出する`react/exhaustive-deps`というルールも試しましたが、oxlintの設定ファイル（`categories`・`rules`のどちらの経由でも）有効化できないことを実機で確認しました。設定ファイルに`"react/exhaustive-deps": "warn"`を足しても、実行時に読み込まれるルール総数が変化しないためです。`pages/SearchView.tsx`・`components/SortableBoardRow.tsx`に残る`// eslint-disable-next-line react-hooks/exhaustive-deps`というコメント（ESLintからの移行時の名残）は、現状どのツールにも検証されないコメントになっています。
+[9章](./03-state-effect.md#9-フックのルール)で扱った`react/rules-of-hooks`と対になるのが、`useEffect`の依存配列漏れを検出する**exhaustive-deps**です。当初は`"react/exhaustive-deps": "warn"`と書いて有効化を試み、読み込まれるルール総数が変化しないことから「oxlintでは有効化できない」と結論づけていました。
+
+しかし後日（#67の対応時）に改めて調べたところ、**プラグイン名の指定が誤っていただけ**でした。正しくは`react`ではなく`react-hooks`です。
+
+```json
+"rules": {
+  "react/rules-of-hooks": "error",
+  "react-hooks/exhaustive-deps": "error"
+}
+```
+
+紛らわしいのは、`rules-of-hooks`のほうが`react/`でも`react-hooks/`でも通ってしまう点です。そのため「`react/`接頭辞で書けばよい」という誤った一般化が起き、`react/exhaustive-deps`という存在しない名前を指定していました。
+
+**なぜ間違いに気づけなかったのか**も、この件の教訓です。oxlintは**存在しないルール名に対しては設定ファイルの読み込み自体を失敗させます**。
+
+```
+Failed to parse oxlint configuration file.
+  x Rule 'this-rule-does-not-exist' not found in plugin 'react'
+```
+
+このエラーが出なかった＝名前は正しかった、と判断できたはずでした。当時は「ルール総数が変わらない」という間接的な観察だけで結論を出してしまい、この直接的な手がかりを使っていませんでした。**「動かない」と結論づける前に、ツールがエラーを出す条件を一度確かめてみる**——という手順を踏んでいれば、より早く気づけた種類の誤りです。
+
+### 意図的に省略した依存配列を「意図的だ」と示す
+
+有効化したことで、`pages/SearchView.tsx`・`components/SortableBoardRow.tsx`が依存配列から意図的に外している値（それぞれ`keywordInUrl`・`board.name`）が、実際にルールの検出対象になりました。どちらも[14章](./05-router.md#14-urlを状態の置き場所にする)・[29章](./10-board-management.md#29-インライン改名編集とescapeの競合)で述べたとおり、**含めると壊れる**ため意図的に外しているものです。
+
+そこで、これらの箇所には抑制コメントを添えています。
+
+```typescript
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedKeyword, fromPath])
+```
+
+以前は`// eslint-disable-next-line ...`と書かれていました。oxlintはESLint互換のためこの接頭辞も解釈するので実際に機能はしていたのですが、このプロジェクトにESLintは導入されていません。「動いてはいるが、書いてあるツール名が実在しない」という状態は読み手を迷わせるため、`oxlint-`接頭辞へ揃えました。
+
+抑制コメントは、無いほうが良いものと思われがちです。しかしこの2箇所については逆で、**「ルールが検出しうる状態で、明示的に抑制している」ことに意味があります**。コメントが無ければ「依存配列に入れ忘れた」のか「意図して外した」のかを、コードだけでは区別できません。ルールを有効化して初めて、この区別が機械的に強制されるようになりました。
 
 ### push前チェックとの関係
 
@@ -238,4 +273,4 @@ oxlintは既定で「`warn`扱いの指摘だけが残っている状態」を�
 
 このoxlintの実行は、現在はCIではなく**push前のローカルチェック**（`scripts/quality-check.sh`。Claude Code利用時は`.claude/hooks/pre-push-quality-check.sh`が`git push`実行前に自動で呼び出す）が担っています。CIはPRを作成した「後」にしか走らず問題に気づくタイミングとして遅いため、静的解析はpush前チェック側に寄せ、CIは`tsc -b && vite build`が通ることの確認に絞っています（詳しい経緯は[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-push前の品質チェック)参照）。
 
-[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-push前の品質チェック)の方針では、上記8件（Issue #66・#67で管理）が解消されるまでの間は`--deny-warnings`を付けず、まずerror（`correctness`カテゴリ、現状0件）のみでゲートしています。指摘を1件ずつ解消し終えたら`scripts/quality-check.sh`内の`OXLINT_ARGS`に`--deny-warnings`を付け、以後の新しい警告もpush前チェックで検出できる状態へ引き上げる想定です。
+[CONTRIBUTING.md 5章](../../CONTRIBUTING.md#5-push前の品質チェック)の方針では、上記8件（`jsx-a11y`の6件はIssue #66、`promise`の2件はIssue #73で管理）が解消されるまでの間は`--deny-warnings`を付けず、まずerror（`correctness`カテゴリと、上で有効化した`react-hooks/exhaustive-deps`。現状0件）のみでゲートしています。指摘を1件ずつ解消し終えたら`scripts/quality-check.sh`内の`OXLINT_ARGS`に`--deny-warnings`を付け、以後の新しい警告もpush前チェックで検出できる状態へ引き上げる想定です。

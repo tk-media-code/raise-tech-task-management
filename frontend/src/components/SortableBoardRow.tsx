@@ -84,7 +84,10 @@ function SortableBoardRow({
     setDraftName(board.name)
     nameInputRef.current?.focus()
     nameInputRef.current?.select()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 上記のとおり意図的な省略であることを、ルールに対しても明示する。
+    // ESLintは導入していないため接頭辞はoxlint-（.oxlintrc.jsonで
+    // react-hooks/exhaustive-depsをerrorとして有効化している）。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [isRenaming])
 
   const { mutate: renameBoard, submitting: renaming, error: renameError } = useMutation<
