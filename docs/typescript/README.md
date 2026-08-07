@@ -142,7 +142,7 @@ JavaScriptに静的型付けを追加した言語で、型注釈は最終的に�
 
 ## 13. `Promise`と`async`・`await`
 
-`readProblemDetail`の`async`/`await`と、`useApi`の`.then`/`.catch`/`.finally`チェーンという2つの書き方が使い分けられている理由（`useEffect`は`Promise`を返せない制約）、`Promise.all`による並列待機を解説します。
+`useEffect`は`Promise`を返せないという制約と、その中で`await`を使うための**即時実行`async`関数**（`void (async () => { ... })()`）を解説します。`finally`ブロックに`return`を書くと`catch`の`return`を上書きしてしまう落とし穴、`map`のコールバックを`async`にしても並列性は失われないこと、`Promise.all`による並列待機も扱います。
 
 📄 詳細：[06-async.md](./06-async.md#13-promiseとasyncawait)
 

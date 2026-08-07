@@ -7,7 +7,7 @@ import SearchResultItem from '../components/SearchResultItem'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import type { CardResponse } from '../types/api'
+import type { BoardResponse, CardResponse } from '../types/api'
 
 /** キーワード入力が止まってから、実際に検索へ反映するまでの待ち時間 */
 const DEBOUNCE_MS = 300
@@ -27,6 +27,19 @@ type SearchLocationState = {
   from?: string
 }
 
+type Props = {
+  /**
+   * App.tsxが取得済みのボード一覧。この画面自身は使わず、ラベル絞り込みUI
+   * （LabelFilterBar）へそのまま渡すためだけに受け取る。LabelFilterBarに独自の
+   * GET /api/boardsを持たせない理由はcomponents/LabelFilterBar.tsxのdocblock参照。
+   */
+  boards: BoardResponse[] | null
+  /** ボード一覧の取得中かどうか（同上、LabelFilterBarへ中継する） */
+  boardsLoading: boolean
+  /** ボード一覧の取得に失敗した場合のエラー（同上、LabelFilterBarへ中継する） */
+  boardsError: Error | null
+}
+
 /**
  * 検索結果画面（要件定義 docs/requirements/03-screens.md 6章の⑤）。
  * キーワード（タイトル・説明への部分一致）とラベル（要件5.8よりOR条件。バックエンドの
@@ -41,7 +54,7 @@ type SearchLocationState = {
  * （components/BoardSelect.tsxがuseMatchでURLを「唯一の真実」にしているのと同じ考え方を、
  * 検索条件という別の状態にも広げている）。
  */
-function SearchView() {
+function SearchView({ boards, boardsLoading, boardsError }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -127,7 +140,11 @@ function SearchView() {
     // どちらも含めると「戻る操作との競合」や「無関係なURL変更での余分な履歴」を招く。
     // fromPathはuseStateの初期値のまま変わらない値なので、依存配列に入れても入れなくても
     // 再実行のタイミングに影響しないが、実際に参照している値として明記しておく。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //
+    // 上記のとおり意図的な省略であることを、ルールに対しても明示する。
+    // ESLintは導入していないため接頭辞はoxlint-（.oxlintrc.jsonで
+    // react-hooks/exhaustive-depsをerrorとして有効化している）。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword, fromPath])
 
   /** ラベルチップがクリックされたとき、選択中なら外し、そうでなければ加える */
@@ -208,7 +225,13 @@ function SearchView() {
       />
 
       <div className="mb-4">
-        <LabelFilterBar selectedLabelIds={labelIdsInUrl} onToggle={toggleLabel} />
+        <LabelFilterBar
+          boards={boards}
+          boardsLoading={boardsLoading}
+          boardsError={boardsError}
+          selectedLabelIds={labelIdsInUrl}
+          onToggle={toggleLabel}
+        />
       </div>
 
       {renderContent()}

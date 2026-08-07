@@ -29,6 +29,7 @@
 | 29〜30章 | ボード管理（改名・削除） | [10-board-management.md](./10-board-management.md) |
 | 31〜32章 | カードの完全削除 | [11-card-deletion.md](./11-card-deletion.md) |
 | 33章 | oxlintの設定強化 | [07-build-tooling.md](./07-build-tooling.md) |
+| 34章 | ネイティブ`<dialog>`とモーダルのアクセシビリティ | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 | 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
 
 ## 目次
@@ -66,6 +67,7 @@
 31. [2つ目の削除機能——`useDelete`と`window.confirm`の再利用](./11-card-deletion.md#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)
 32. [影響範囲の見極め——なぜ`dataVersion`が要らないのか](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
 33. [oxlintの設定強化](./07-build-tooling.md#33-oxlintの設定強化)
+34. [ネイティブ`<dialog>`とモーダルのアクセシビリティ](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
 35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 
 ---
@@ -168,7 +170,7 @@
 
 ## 13. React Routerの基本
 
-`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点も扱います。
+`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点や、どのURLにも一致しなかったときの受け皿になる`path="*"`（書く位置が意味を持つ唯一の`Route`）も扱います。
 
 📄 詳細：[05-router.md](./05-router.md#13-react-routerの基本)
 
@@ -184,7 +186,7 @@
 
 ## 15. コンポーネント設計と状態の持ち方
 
-`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。横断ビューで`CardCreateForm`をボードの数だけ並べたとき、stateがインスタンスごとに独立して管理される（＝1つしか開けないという制約を自前で書く必要が無い）ことも扱います。
+`BoardSelect`を`<Routes>`の外側に置く理由、`renderContent()`をコンポーネント化しない理由、`CardItem`と`SearchResultItem`をあえて分けた理由など、個々の構文ではなく設計判断そのものを扱います。横断ビューで`CardCreateForm`をボードの数だけ並べたとき、stateがインスタンスごとに独立して管理される（＝1つしか開けないという制約を自前で書く必要が無い）ことも扱います。データ取得を「各コンポーネントが独立して行う」方針が2段階を経て取り下げられた経緯（Write→Readの競合、および親がすでに持っている値の二重取得）と、それでもContextには飛びつかない判断も扱います。
 
 📄 詳細：[06-component-design.md](./06-component-design.md#15-コンポーネント設計と状態の持ち方)
 
@@ -328,9 +330,17 @@
 
 ## 33. oxlintの設定強化
 
-品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。`react/exhaustive-deps`が設定ファイル経由でも有効化できないことを実機で確認した結果や、実際に検出された8件の指摘も扱います。
+品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。実際に検出された8件の指摘に加え、当初「有効化できない」と結論づけた`exhaustive-deps`が、実はプラグイン名の誤り（`react/`ではなく`react-hooks/`）だったという後日談も扱います。存在しないルール名なら設定の読み込み自体が失敗するという、気づけたはずの手がかりを見落としていた経緯も残しています。
 
 📄 詳細：[07-build-tooling.md](./07-build-tooling.md#33-oxlintの設定強化)
+
+---
+
+## 34. ネイティブ`<dialog>`とモーダルのアクセシビリティ
+
+`<div>`で組み立てていた2つのモーダルを、HTMLの`<dialog>`要素へ置き換えました。`open`属性ではなく`showModal()`を呼ばなければフォーカストラップも`::backdrop`も効かないという最大の落とし穴、命令的なDOM APIを`useRef`＋`useEffect`から呼ぶ形、Escapeの`cancel`イベントを`preventDefault()`で止めてReactのstate経由で閉じる理由、Tailwindの`backdrop:`バリアント、そして背景クリック判定に`role="presentation"`が残る理由を扱います。
+
+📄 詳細：[12-dialog-accessibility.md](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
 
 ---
 
@@ -348,7 +358,7 @@ Reactの入門書には載っているのに、本プロジェクトのコード
 
 | 機能 | 本プロジェクトに登場しない理由 |
 | --- | --- |
-| Context（`useContext`） | [19章](#19-書き込みpostとデータの更新)で述べたとおり、ボード一覧の共有が必要になった際も、消費者がまだ2つ（`BoardSelect`・`BoardManageModal`）だけのためリフトアップで足りている。消費者がさらに増えたときの検討課題として残る |
+| Context（`useContext`） | [19章](#19-書き込みpostとデータの更新)・[15章](./06-component-design.md#15-コンポーネント設計と状態の持ち方)で述べたとおり、ボード一覧の消費者は4つ（`BoardSelect`・`BoardManageModal`・`CrossBoardView`・`SearchView`経由の`LabelFilterBar`）に増えたが、いずれも`App.tsx`から1〜2階層の距離にあり、リフトアップとpropsのリレーで足りている。階層がさらに深くなったときの検討課題として残る |
 | `useReducer` | state更新のロジックが単純で、`useState`（[7章](#7-stateとusestate)）で足りている |
 | `React.memo`（コンポーネントの再描画抑制） | 再描画コストが問題になるほど重いコンポーネントがまだ無い |
 | エラーバウンダリ | 現状のエラー処理はAPI通信の失敗（[11章](#11-データ取得の3状態とレースコンディション)のstate）に限られ、予期しない描画エラー自体を捕捉する仕組みは未導入 |

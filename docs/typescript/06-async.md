@@ -32,51 +32,69 @@ async function readProblemDetail(response: Response): Promise<ProblemDetail | nu
 > **Javaとの対比**
 > [docs/java 24章](../java/06-exception-and-null.md#24-例外の仕組み)の`try`/`catch`と構文はそっくりですが、対象が違います。Javaの`try`/`catch`は同期的に実行される処理の例外を捕まえるのに対し、TypeScriptの`try`/`catch`が`await`と組み合わさったときに捕まえるのは、**非同期処理（`Promise`）が失敗（reject）した場合**です。`await`の付いていないただの`Promise`は、`try`/`catch`では捕まえられません（後述の`.catch(...)`が必要です）。
 
-### なぜ`useEffect`の中は`async`/`await`ではなく`.then`チェーンなのか
+### `useEffect`の中で`await`する——即時実行の`async`関数で包む
 
-`hooks/useApi.ts`は`readProblemDetail`とは対照的に、`async`/`await`を使わず`.then`/`.catch`/`.finally`をつないでいます。
+`useEffect`のコールバックには制約があります。[docs/react 8章](../react/03-state-effect.md#8-useeffectと副作用クリーンアップ)のとおり、渡す関数は「何も返さない」か「クリーンアップ関数を返す」かのどちらかでなければならず、`Promise`を返すことが許されていません。`async function`は必ず`Promise`を返す（[本章冒頭](#13-promiseとasyncawait)参照）ため、**`useEffect(async () => { ... }, [path])`とは書けません**。Reactが返ってきた`Promise`をクリーンアップ関数と誤認してしまいます。
+
+当初この制約への対処として、`hooks/useApi.ts`は`.then`/`.catch`/`.finally`をつなぐ書き方を採っていました。しかしこれは、[docs/react 33章](../react/07-build-tooling.md#33-oxlintの設定強化)で導入したoxlintの`promise/always-return`に指摘される形でもあります。`.then()`のコールバックが値を返していないと、「まだチェーンを繋ぐつもりなのか、そこで終わりなのか」がコードの見た目から判断できないためです。
+
+制約を満たしつつ`await`を使うには、**即時実行の`async`関数**で包みます。
 
 ```typescript
-fetchJson<T>(path, controller.signal)
-  .then((json) => {
-    setData(json)
-  })
-  .catch((cause: unknown) => {
+void (async () => {
+  try {
+    setData(await fetchJson<T>(path, controller.signal))
+  } catch (cause: unknown) {
     if (controller.signal.aborted) return
     setError(cause instanceof Error ? cause : new Error(String(cause)))
-  })
-  .finally(() => {
-    if (controller.signal.aborted) return
-    setLoading(false)
-  })
+  } finally {
+    if (!controller.signal.aborted) setLoading(false)
+  }
+})()
 ```
 
-これは書き方の好みではなく、[docs/react 8章](../react/03-state-effect.md#8-useeffectと副作用クリーンアップ)で扱う`useEffect`の制約によるものです。`useEffect`に渡すコールバック関数は、「何も返さない」か「クリーンアップ関数を返す」かのどちらかでなければならず、`Promise`を返すことが許されていません。`async function`は必ず`Promise`を返す関数になる（[本章冒頭](#13-promiseとasyncawait)参照）ため、`useEffect(async () => { ... }, [path])`のようには書けません。そのためこのファイルでは、`useEffect`のコールバック自体は`async`にせず、その内部で`fetchJson(...).then(...)`という**`Promise`のメソッドを直接つなぐ書き方**を選んでいます。
+`(async () => { ... })()` は「`async`な関数を定義して、その場で呼び出す」という書き方です。`useEffect`のコールバック**自体**は`async`ではないので何も返さず、制約を満たします。内側の`async`関数が返す`Promise`は誰も受け取りませんが、それは意図どおりです。先頭の`void`は「この`Promise`の結果は使わない」という意思表示で、書き忘れではないことを読み手に伝えます。
 
-- `.then(onFulfilled)`：`Promise`が成功したときの処理を登録します。
-- `.catch(onRejected)`：`Promise`が失敗したときの処理を登録します。
-- `.finally(onFinally)`：成功・失敗どちらでも最後に必ず実行される処理を登録します（`loading`を`false`に戻す処理が、成功時・失敗時の両方に書かれずここ1箇所で済んでいます）。
+#### `finally`の中では`return`しない
+
+書き換えで1つだけ形が変わった箇所があります。
+
+```typescript
+// .finally()のコールバックだったとき
+.finally(() => {
+  if (controller.signal.aborted) return
+  setLoading(false)
+})
+
+// try/catch/finallyのfinallyブロックになった後
+} finally {
+  if (!controller.signal.aborted) setLoading(false)
+}
+```
+
+`.finally()`に渡していたのは**独立した関数**なので、その中の`return`はその関数を抜けるだけでした。一方`try/catch/finally`の`finally`は**同じ関数の一部**であり、ここに`return`を書くと`catch`ブロックの`return`を上書きしてしまいます（JavaScriptの定番の落とし穴です）。今回は戻り値を使っていないので実害はありませんが、紛らわしい書き方を避けて`if`で囲う形にしています。
+
+- `try` / `catch` / `finally`：`.then` / `.catch` / `.finally` と対応します。`finally`は成功・失敗どちらでも必ず実行されるため、`loading`を`false`に戻す処理を1箇所で済ませられる点は変わりません。
 
 ### `Promise.all`：複数の非同期処理を並列に待つ
 
 `hooks/useLabelsByBoard.ts`は、ボードの数だけ`fetchJson`を呼ぶ必要があるという特殊な事情から、`Promise.all`を使っています。
 
 ```typescript
-Promise.all(
-  boards.map((board) =>
-    fetchJson<LabelResponse[]>(apiPaths.boardLabels(board.id), controller.signal).then(
-      (labels): [number, LabelResponse[]] => [board.id, labels],
-    ),
-  ),
+const entries = await Promise.all(
+  boards.map(async (board): Promise<[number, LabelResponse[]]> => [
+    board.id,
+    await fetchJson<LabelResponse[]>(apiPaths.boardLabels(board.id), controller.signal),
+  ]),
 )
-  .then((entries) => {
-    setLabelsByBoard(Object.fromEntries(entries))
-  })
+setLabelsByBoard(Object.fromEntries(entries))
 ```
 
-`boards.map((board) => fetchJson(...))`は、ボード1件につき1つの`Promise`を生成し、`Promise`の配列を作ります。`Promise.all(配列)`は、その配列に含まれる**すべての`Promise`が成功して初めて**成功する、1つの`Promise`を返します（1件でも失敗すれば、`Promise.all`全体もその時点で失敗します）。コメントにあるとおり、Nボードぶんのリクエストを直列に（1件ずつ順番に）待つのではなく、**同時に**投げて全部の完了を待てるため、通信時間はボードの数に比例して伸びません。
+`boards.map((board) => ...)`は、ボード1件につき1つの`Promise`を生成し、`Promise`の配列を作ります。`Promise.all(配列)`は、その配列に含まれる**すべての`Promise`が成功して初めて**成功する、1つの`Promise`を返します（1件でも失敗すれば、`Promise.all`全体もその時点で失敗します）。Nボードぶんのリクエストを直列に（1件ずつ順番に）待つのではなく、**同時に**投げて全部の完了を待てるため、通信時間はボードの数に比例して伸びません。
 
-`.then((labels): [number, LabelResponse[]] => [board.id, labels])`の部分は、「ボードIDとラベル一覧のペア（タプル）」に変換しています。`Promise.all`の結果は`[[1, [...]], [2, [...]], ...]`という配列になり、最後の`Object.fromEntries(entries)`で`{ 1: [...], 2: [...] }`という`Record`（[8章](./03-generics.md#8-recordとreadonlyとas-const)）へ組み替えています。
+ここで注意したいのは、`map`に渡すコールバックを`async`にしても**並列性は失われない**ことです。`async`関数は呼ばれた瞬間に実行を始め、`await`で中断したところで`Promise`を返します。`map`はコールバックを次々に呼ぶので、N本の`fetch`はすべて開始済みの状態で配列に並びます。「直列になるのは`for`ループの中で`await`したとき」であって、`map`＋`Promise.all`の組み合わせでは起きません。
+
+戻り値の型注釈`Promise<[number, LabelResponse[]]>`は、「ボードIDとラベル一覧のペア（タプル）」であることを明示するためのものです。`Promise.all`の結果は`[[1, [...]], [2, [...]], ...]`という配列になり、最後の`Object.fromEntries(entries)`で`{ 1: [...], 2: [...] }`という`Record`（[8章](./03-generics.md#8-recordとreadonlyとas-const)）へ組み替えています。
 
 ---
 

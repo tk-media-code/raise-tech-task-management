@@ -42,29 +42,28 @@ export function useLabelsByBoard(boards: BoardResponse[] | null): UseLabelsByBoa
     setLoading(true)
     setError(null)
 
-    // ボード1件につき1本のfetchJsonを呼び、[boardId, そのボードのラベル一覧]という
-    // タプルに変換する。Promise.allは渡した配列の**全部**が成功して初めて解決する
-    // （1件でも失敗すれば、その時点でPromise.all自体が失敗する）。
-    Promise.all(
-      boards.map((board) =>
-        fetchJson<LabelResponse[]>(apiPaths.boardLabels(board.id), controller.signal).then(
-          (labels): [number, LabelResponse[]] => [board.id, labels],
-        ),
-      ),
-    )
-      .then((entries) => {
+    // useApiと同じく、useEffectのコールバックはasyncにできないため即時実行のasync関数で包む。
+    void (async () => {
+      try {
+        // ボード1件につき1本のfetchJsonを呼び、[boardId, そのボードのラベル一覧]という
+        // タプルに変換する。Promise.allは渡した配列の**全部**が成功して初めて解決する
+        // （1件でも失敗すれば、その時点でPromise.all自体が失敗する）。
+        const entries = await Promise.all(
+          boards.map(async (board): Promise<[number, LabelResponse[]]> => [
+            board.id,
+            await fetchJson<LabelResponse[]>(apiPaths.boardLabels(board.id), controller.signal),
+          ]),
+        )
         // [[1, [...]], [2, [...]], ...] という配列を { 1: [...], 2: [...] } に変換する。
         setLabelsByBoard(Object.fromEntries(entries))
-      })
-      .catch((cause: unknown) => {
+      } catch (cause: unknown) {
         // useApiと同じ理由で、中断（abort）はエラー表示に昇格させない。
         if (controller.signal.aborted) return
         setError(cause instanceof Error ? cause : new Error(String(cause)))
-      })
-      .finally(() => {
-        if (controller.signal.aborted) return
-        setLoading(false)
-      })
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    })()
 
     // 1つのAbortControllerをN本のfetchJsonすべてに共有しているため、abort()を1回呼ぶだけで
     // 進行中の全リクエストをまとめて中断できる（boardsが変わったとき・画面を離れたとき）。

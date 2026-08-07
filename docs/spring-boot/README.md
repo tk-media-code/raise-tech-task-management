@@ -29,6 +29,7 @@
 | 33〜39章 | 更新系API（PUT/PATCH） | [10-update-api.md](./10-update-api.md) |
 | 40〜42章 | 削除API（DELETE）・DBレベルのカスケード削除・状態に依存する削除可否 | [11-delete-api.md](./11-delete-api.md) |
 | 43章 | 静的解析ツールの導入（-Xlint・SpotBugs・Checkstyle） | [02-build-config.md](./02-build-config.md) |
+| 44章 | 自動テスト（JUnit 5・Mockito・MockMvc） | [12-testing.md](./12-testing.md) |
 
 ## 目次
 
@@ -75,6 +76,7 @@
 41. [物理削除とDBレベルのON DELETE CASCADE](./11-delete-api.md#41-物理削除とdbレベルのon-delete-cascade)
 42. [削除の可否を状態で決める——「在るか」だけでは足りないとき](./11-delete-api.md#42-削除の可否を状態で決める在るかだけでは足りないとき)
 43. [静的解析ツールの導入](./02-build-config.md#43-静的解析ツールの導入)
+44. [自動テスト：業務ルールをコードで守る](./12-testing.md#44-自動テスト業務ルールをコードで守る)
 
 ---
 
@@ -256,7 +258,7 @@ Java の`record`を使ったDTOの書き方と、エンティティをAPIレス�
 
 ## 23. 例外処理と`@RestControllerAdvice`
 
-`@RestControllerAdvice`による例外処理の一元化と、RFC 9457に沿った`ProblemDetail`でのエラーレスポンスの返し方を解説します。
+`@RestControllerAdvice`による例外処理の一元化と、RFC 9457に沿った`ProblemDetail`でのエラーレスポンスの返し方を解説します。想定外の例外を受け止めるフォールバックを**別クラスに分けて`@Order(LOWEST_PRECEDENCE)`にした理由**——同じクラスに置くとフレームワーク由来の404・400まで500に化けてしまう——と、500では例外メッセージをクライアントへ返さない理由も扱います。
 
 📄 詳細：[06-service-controller.md](./06-service-controller.md#23-例外処理とrestcontrolleradvice)
 
@@ -304,7 +306,7 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 
 ## 29. リクエストDTOとBean Validation
 
-`spring-boot-starter-validation`の導入と、`@NotNull`・`@NotBlank`・`@Size`によるリクエストDTOの検証を解説します。レスポンスDTO（22章）との性格の違い、フォームの`disabled`→Bean Validation→DBの制約という3層の多重防御の考え方も扱います。
+`spring-boot-starter-validation`の導入と、`@NotNull`・`@NotBlank`・`@Size`によるリクエストDTOの検証を解説します。レスポンスDTO（22章）との性格の違い、フォームの`disabled`→Bean Validation→DBの制約という3層の多重防御の考え方も扱います。あわせて、DBのカラム長に由来する`title`の上限が3層で守られるのに対し、業務上の判断として決めた`description`の上限が2層で足りる理由——制約の「出どころ」の違い——も扱います。
 
 📄 詳細：[09-write-api-validation.md](./09-write-api-validation.md#29-リクエストdtoとbean-validation)
 
@@ -360,7 +362,7 @@ Spring Bootが既定で有効にしているOSIV（Open Session In View）の挙
 
 ## 36. ステータス変更と列内の並び替え
 
-ドラッグ＆ドロップによる列間の移動・列内の並べ替え（要件5.3）を1本のロジックで扱う`updateStatus`の実装を解説します。position値を列全体で振り直す理由、移動元列を詰め直さない理由、`findMaxPosition`とは異なる母集団（アーカイブ済みを除外）を使う理由を扱います。
+ドラッグ＆ドロップによる列間の移動・列内の並べ替え（要件5.3）を1本のロジックで扱う`updateStatus`の実装を解説します。position値を列全体で振り直す理由、移動元列を詰め直さない理由、`findMaxPosition`とは異なる母集団（アーカイブ済みを除外）を使う理由、そしてアーカイブ済みカードへのステータス変更をService層で拒否する理由を扱います。
 
 📄 詳細：[10-update-api.md](./10-update-api.md#36-ステータス変更と列内の並び替え)
 
@@ -419,6 +421,14 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 コンパイルが通ることと「動くこと」だけでは見落とす問題を機械的に検出するため、`-Xlint:all`（javac標準）・SpotBugs（bytecodeレベルのバグ検出）・Checkstyle（ソースコードの見落とし検出）の3つを導入しました。Google/Sunの既定ルールセットは書式（インデント等）に踏み込みすぎるため採用せず、書式に関係しない検査項目だけを選んでいます。SpotBugsがJava 25のbytecodeを解析できるかの検証結果や、JPAエンティティ・DTO recordで大量に検出された`EI_EXPOSE_REP`系を除外した理由も扱います。
 
 📄 詳細：[02-build-config.md](./02-build-config.md#43-静的解析ツールの導入)
+
+---
+
+## 44. 自動テスト：業務ルールをコードで守る
+
+「壊れても画面はそれらしく動いてしまう」業務ルール（アーカイブ可否・削除可否・positionの振り直しなど）を、手動の`curl`確認からテストコードへ移しました。Testcontainersを使えない環境（コンテナ内からDocker socketが見えない）で何ならできるかを考え、Mockitoによる Service層の単体テストと、`@WebMvcTest`によるController層のスライステストという、DBに依存しない2層から始めています。`@InjectMocks`がコンストラクタインジェクションの利点をそのまま利用していること、`verify(never())`で「呼ばれなかったこと」＝検証の順序という設計判断を守れること、そして**わざと実装を壊して狙ったテストだけが赤くなるか**を確かめた結果も扱います。
+
+📄 詳細：[12-testing.md](./12-testing.md#44-自動テスト業務ルールをコードで守る)
 
 ---
 

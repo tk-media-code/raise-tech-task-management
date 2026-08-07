@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent, SyntheticEvent } from 'react'
 import { apiPaths } from '../api/client'
 import { useApi } from '../hooks/useApi'
 import { useMutation } from '../hooks/useMutation'
@@ -48,6 +48,10 @@ type Props = {
  * ドラッグ＆ドロップ（hooks/useCardDragAndDrop.ts）とスマートフォン限定の「移動▾」メニュー
  * （CardItem.tsx）が引き続き担う。どちらもこのモーダルとは別のuseMutationインスタンス・
  * 別のハンドラを持つ独立した呼び出し元であり、この変更の影響を受けない。
+ *
+ * モーダルの実体はHTMLの<dialog>要素で、useEffectからshowModal()を呼んで開く。
+ * フォーカストラップ・背景要素の不活性化・Escapeでの閉じる操作・::backdropによる暗幕は、
+ * 自前で実装せずすべてブラウザの機能に任せている（docs/react/12-dialog-accessibility.md 34章参照）。
  *
  * 一覧（CrossBoardView・BoardDetailView・SearchView）が既に持っているカードの情報を使い回さず、
  * 開くたびに GET /api/cards/{id} を再取得している。理由は3つ:
@@ -131,29 +135,43 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
     cardId === null ? '' : apiPaths.updateCardArchive(cardId),
   )
 
+  // <dialog>要素への参照。showModal()という命令的なDOM APIを呼ぶために必要
+  // （docs/react/08-form-and-mutation.md 20章のuseRefと同じ使い方）。
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
   useEffect(() => {
     if (cardId === null) return
+    const dialog = dialogRef.current
+    if (dialog === null) return
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
+    // JSXにopen属性を書くのではなくshowModal()を呼ぶ。open属性だけで開いた<dialog>は
+    // 「非モーダル」扱いになり、フォーカストラップ・背景要素の不活性化・::backdropの
+    // どれも効かない。この3つはshowModal()で開いたときにだけブラウザが面倒を見てくれる。
+    dialog.showModal()
 
-    // モーダル自身ではなくdocumentに登録するのは、フォーカスがモーダル内の
-    // どの要素にあってもEscapeを拾えるようにするため。
-    document.addEventListener('keydown', handleKeyDown)
-
-    // 後片付け。これを書き忘れると、モーダルを開閉するたびにリスナーが積み上がり、
-    // Escape1回で閉じる処理が何度も走る（＝典型的なメモリリーク／二重実行バグ）になる。
+    // 閉じるときはこのコンポーネントごとアンマウントされるが、明示的にclose()も呼ぶ。
+    // showModal()で開いた<dialog>はブラウザの「トップレイヤー」に登録されるため、
+    // 閉じないまま要素だけ消えると、フォーカスを開く前の要素へ戻す処理も行われない。
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+      dialog.close()
     }
-  }, [cardId, onClose])
-  // onCloseを依存配列に入れているのは、useEffectのルールとして「エフェクト内で
-  // 使っている値は依存配列に書く」ことが求められるため。呼び出し元（各ページ）で
-  // onCloseの実体（setSelectedCardId(null)を呼ぶ関数）を毎レンダリング作り直しても、
-  // 中身は同じなのでここでは実害が無い（新しい関数として登録し直されるだけ）。
+  }, [cardId])
 
   if (cardId === null) return null
+
+  /**
+   * Escapeキーによる「閉じる」要求（<dialog>のcancelイベント）を受け取る。
+   *
+   * 以前はdocumentにkeydownリスナーを登録して自前でEscapeを拾っていたが、
+   * showModal()で開いた<dialog>はブラウザ自身がEscapeを処理してくれるため不要になった。
+   * ただし既定の動作は「DOM上でdialogを閉じる」だけで、Reactのstate（親が持つ
+   * selectedCardId）は開いたままになる。この食い違いを避けるため、既定動作は
+   * preventDefault()で止め、必ずonClose()経由でReact側から閉じる。
+   */
+  function handleCancel(event: SyntheticEvent<HTMLDialogElement>) {
+    event.preventDefault()
+    onClose()
+  }
 
   const titleTrimmed = title.trim()
   // 「保存」は最大2本のリクエスト（PUT→PATCH）を順に送るため、送信中かどうかは
@@ -241,191 +259,221 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
   }
 
   return (
-    <div
-      // fixed inset-0: 画面全体を覆うオーバーレイ。z-50で他の要素より前面に出す。
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:p-8"
-      // 背景クリックで閉じる。event.target（実際にクリックされた要素）と
-      // event.currentTarget（このハンドラが付いている要素＝このdiv自身）が
-      // 一致するときだけ閉じる、という判定にしている。モーダル本体側で
-      // stopPropagation()する方法もあるが、あちらはイベントの伝播そのものを
-      // 止めてしまい、将来の別機能（ドキュメント全体を監視したいクリックなど）を
-      // 壊しかねない。こちらは「自分が直接クリックされたか」を見るだけなので副作用がない。
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+    <dialog
+      ref={dialogRef}
+      // Escapeキーはブラウザがcancelイベントとして届けてくれる（handleCancel参照）。
+      onCancel={handleCancel}
+      // role="dialog" / aria-modal="true" は書かない。<dialog>をshowModal()で開けば
+      // どちらもブラウザが暗黙に与えるため、明示すると二重になる（oxlintの
+      // jsx-a11y(prefer-tag-over-role)が指摘していたのもこの点）。
+      aria-label="カード詳細"
+      // <dialog>のブラウザ既定スタイル（中央寄せのmargin・border・padding・
+      // 幅と高さの上限）を打ち消し、画面全体を覆うオーバーレイとして使う。
+      // 背景の暗幕は自前のdivではなく、backdrop:バリアントで::backdrop疑似要素へ当てる。
+      // z-50が不要になったのは、showModal()で開いた<dialog>がブラウザの「トップレイヤー」
+      // に載り、z-indexに関係なく常に最前面に描画されるため。
+      className="m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto border-0 bg-transparent p-0 backdrop:bg-slate-900/50"
     >
+      {/* 背景（＝白いカードの外側）クリックで閉じるための領域。
+          role="presentation"は「この要素自体に固有の意味は無く、レイアウトと
+          クリック判定のためだけに存在する」ことを支援技術へ明示するもの。
+          クリックはあくまで補助的な閉じ方で、キーボードからはEscape（cancelイベント）と
+          ヘッダーの×ボタンという2つの手段が別途あるため、この要素自体を
+          フォーカス可能にする必要はない。
+          判定は、event.target（実際にクリックされた要素）とevent.currentTarget
+          （このハンドラが付いている要素＝このdiv自身）が一致するときだけ閉じる形。
+          モーダル本体側でstopPropagation()する方法もあるが、あちらはイベントの伝播
+          そのものを止めてしまい、将来の別機能（ドキュメント全体を監視したいクリックなど）を
+          壊しかねない。こちらは「自分が直接クリックされたか」を見るだけなので副作用がない。 */}
       <div
-        className="w-full max-w-lg rounded-lg bg-white shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-label="カード詳細"
+        role="presentation"
+        className="flex min-h-full items-start justify-center p-4 sm:p-8"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose()
+        }}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
-          {/* 読み込み中はタイトルがまだ無いので、枠だけ先に見せる。
-              入力中の下書き（title state）ではなく取得済みのcard.titleを表示するのは、
-              「保存」前の見出しは常に確定済みの値を示すべきという判断による。 */}
-          <h2 className="text-base font-bold">{card?.title ?? 'カード詳細'}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
-          >
-            ×
-          </button>
-        </header>
-
-        <div className="space-y-4 p-4 text-sm">
-          {loading && <StatusMessage kind="loading">読み込み中…</StatusMessage>}
-          {error !== null && (
-            <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
-          )}
-
-          {/* cardがnullでないときだけ編集フォームを描く。読み込み中・保存後の再取得中は
-              一瞬cardがnullに戻る（hooks/useApi.tsの仕様）ため、その間はフォームごと消える
-              （BoardDetailView等が新規作成後の再取得中に3列を一時的に隠すのと同じ挙動）。 */}
-          {card !== null && (
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <p className="text-xs text-slate-500">ボード：{card.boardName}</p>
-
-              <div>
-                <label htmlFor="card-detail-title" className="text-xs font-semibold text-slate-500">
-                  タイトル
-                </label>
-                <input
-                  id="card-detail-title"
-                  type="text"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  maxLength={200}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="card-detail-status" className="text-xs font-semibold text-slate-500">
-                  ステータス
-                </label>
-                <select
-                  id="card-detail-status"
-                  // 他の項目と同じく下書きstateに紐づける（このコンポーネントのdocblock参照）。
-                  value={status}
-                  onChange={handleStatusChange}
-                  disabled={submitting}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
-                >
-                  {/* mapの引数名をstatusにすると、上で定義した下書きstate変数のstatusを
-                      覆い隠して紛らわしいため、optionという別名にする（中身は同じくCardStatus）。 */}
-                  {STATUSES.map((option) => (
-                    <option key={option} value={option}>
-                      {STATUS_LABELS[option]}
-                    </option>
-                  ))}
-                </select>
-                {/* PATCH失敗直後のrefetch()で下書きstatusはサーバーの値へ戻る。そのため
-                    「失敗したままステータスに触れず他の項目だけ直して再保存した」場合、
-                    上のガード（handleSubmit内のstatus !== card.status）によりPATCHが再送されず、
-                    このエラーは次にchangeStatusが呼ばれるまで残り続ける（useMutationのerrorは
-                    次のmutate開始時にしかクリアされない。hooks/useMutation.ts参照）。表示中の
-                    <select>の値自体は常に正しいため実害は「古いエラー文が残る」ことだけであり、
-                    この程度でuseMutationへリセット手段を足すことはしない。 */}
-                {statusError !== null && (
-                  <StatusMessage kind="error">{statusError.message}</StatusMessage>
-                )}
-              </div>
-
-              <div>
-                <label htmlFor="card-detail-description" className="text-xs font-semibold text-slate-500">
-                  説明・メモ
-                </label>
-                <textarea
-                  id="card-detail-description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  rows={4}
-                  className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="card-detail-due-date" className="text-xs font-semibold text-slate-500">
-                  期日
-                </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    id="card-detail-due-date"
-                    type="date"
-                    value={dueDate}
-                    onChange={(event) => setDueDate(event.target.value)}
-                    className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                  />
-                  {/* 編集中の下書き（dueDate）に対して、期限切れ/期限間近をその場で示す
-                      （要件5.6）。ワイヤーフレーム6.2④の「期日: 🔴 2026/07/15」に対応する。 */}
-                  {dueDate !== '' && <DueDateBadge dueDate={dueDate} />}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-semibold text-slate-500">ラベル</p>
-                <div className="mt-1">
-                  <LabelPicker boardId={card.boardId} selectedLabelIds={labelIds} onChange={setLabelIds} />
-                </div>
-              </div>
-
-              {saveError !== null && <StatusMessage kind="error">{saveError.message}</StatusMessage>}
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="submit"
-                  // 要件5.2と同じ「タイトルが未入力の間は押せない」という考え方をここにも適用する。
-                  disabled={titleTrimmed === '' || submitting}
-                  title={titleTrimmed === '' ? 'タイトルを入力してください' : undefined}
-                  className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
-                >
-                  {submitting ? '保存中…' : '保存'}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        {/* cardがnullの間（読み込み中）はisArchivedを参照できずボタンのラベルを決められないため、
-            フォーム本体と同じくcard !== nullの間だけ描画する。 */}
-        {card !== null && (
-          <footer className="flex items-center justify-between gap-3 border-t border-slate-200 p-4">
+        <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+          <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4">
+            {/* 読み込み中はタイトルがまだ無いので、枠だけ先に見せる。
+                入力中の下書き（title state）ではなく取得済みのcard.titleを表示するのは、
+                「保存」前の見出しは常に確定済みの値を示すべきという判断による。 */}
+            <h2 className="text-base font-bold">{card?.title ?? 'カード詳細'}</h2>
             <button
               type="button"
-              onClick={handleArchiveToggle}
-              // 「完了」ステータスのカードのみアーカイブできる（プロトタイプprototype/app.jsの
-              // populateCardModalと同じ業務ルール。バックエンドCardService.updateArchivedも
-              // 同じ制約を検証しており、ここでの無効化はサーバーへの無駄なリクエストを防ぐための
-              // 先回りに過ぎない）。復元（isArchived=trueから戻す）にはこの制約が無い。
-              // disabledの判定はcard.status（サーバーに永続化されている値）で行う。アーカイブは
-              // 「保存」を経由しない独立した即時操作であり、バックエンドも永続化された値しか
-              // 見ないため、活性・非活性はドラフトではなくサーバー側の実際の値に合わせる。
-              disabled={archiving || (!card.isArchived && card.status !== 'done')}
-              title={
-                !card.isArchived && card.status !== 'done'
-                  ? // ただしツールチップの文言だけはドラフトのstatusも見る。そうしないと、
-                    // <select>で「完了」を選んだ直後（まだ保存前）もボタンは無効のままなのに
-                    // 「完了ステータスのカードのみアーカイブできます」という、選んだ内容と
-                    // 矛盾する文言が出続けてしまう。
-                    status === 'done'
-                    ? 'ステータスの変更を「保存」してからアーカイブできます'
-                    : '完了ステータスのカードのみアーカイブできます'
-                  : undefined
-              }
-              className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={onClose}
+              aria-label="閉じる"
+              className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
             >
-              {archiving ? '処理中…' : card.isArchived ? '復元' : 'アーカイブ'}
+              ×
             </button>
-            {archiveError !== null && (
-              <StatusMessage kind="error">{archiveError.message}</StatusMessage>
+          </header>
+
+          <div className="space-y-4 p-4 text-sm">
+            {loading && <StatusMessage kind="loading">読み込み中…</StatusMessage>}
+            {error !== null && (
+              <StatusMessage kind="error">読み込みに失敗しました：{error.message}</StatusMessage>
             )}
-          </footer>
-        )}
+
+            {/* cardがnullでないときだけ編集フォームを描く。読み込み中・保存後の再取得中は
+                一瞬cardがnullに戻る（hooks/useApi.tsの仕様）ため、その間はフォームごと消える
+                （BoardDetailView等が新規作成後の再取得中に3列を一時的に隠すのと同じ挙動）。 */}
+            {card !== null && (
+              <form onSubmit={handleSubmit} className="space-y-3">
+                <p className="text-xs text-slate-500">ボード：{card.boardName}</p>
+
+                <div>
+                  <label htmlFor="card-detail-title" className="text-xs font-semibold text-slate-500">
+                    タイトル
+                  </label>
+                  <input
+                    id="card-detail-title"
+                    type="text"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    maxLength={200}
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="card-detail-status" className="text-xs font-semibold text-slate-500">
+                    ステータス
+                  </label>
+                  <select
+                    id="card-detail-status"
+                    // 他の項目と同じく下書きstateに紐づける（このコンポーネントのdocblock参照）。
+                    value={status}
+                    onChange={handleStatusChange}
+                    // アーカイブ済みのカードはバックエンド（CardService.updateStatus）が400で弾く。
+                    // 選べてしまってから保存時にエラーを見せるのではなく、操作自体を塞いで
+                    // 下のヒント文で理由を伝える（アーカイブ画面からもこのモーダルは開ける）。
+                    disabled={submitting || card.isArchived}
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                  >
+                    {/* mapの引数名をstatusにすると、上で定義した下書きstate変数のstatusを
+                        覆い隠して紛らわしいため、optionという別名にする（中身は同じくCardStatus）。 */}
+                    {STATUSES.map((option) => (
+                      <option key={option} value={option}>
+                        {STATUS_LABELS[option]}
+                      </option>
+                    ))}
+                  </select>
+                  {/* PATCH失敗直後のrefetch()で下書きstatusはサーバーの値へ戻る。そのため
+                      「失敗したままステータスに触れず他の項目だけ直して再保存した」場合、
+                      上のガード（handleSubmit内のstatus !== card.status）によりPATCHが再送されず、
+                      このエラーは次にchangeStatusが呼ばれるまで残り続ける（useMutationのerrorは
+                      次のmutate開始時にしかクリアされない。hooks/useMutation.ts参照）。表示中の
+                      <select>の値自体は常に正しいため実害は「古いエラー文が残る」ことだけであり、
+                      この程度でuseMutationへリセット手段を足すことはしない。 */}
+                  {statusError !== null && (
+                    <StatusMessage kind="error">{statusError.message}</StatusMessage>
+                  )}
+                  {/* <select>をdisabledにしただけでは「なぜ選べないのか」が分からないため、
+                      復元すれば変更できることまで書き添える（要件定義5.7の復元導線への案内）。 */}
+                  {card.isArchived && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      アーカイブ済みのカードはステータスを変更できません。復元すると変更できます。
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="card-detail-description" className="text-xs font-semibold text-slate-500">
+                    説明・メモ
+                  </label>
+                  <textarea
+                    id="card-detail-description"
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    rows={4}
+                    // バックエンドのDTO（CardUpdateRequestの@Size(max = 2000)）と同じ値。
+                    // タイトルのmaxLength={200}と同じ考え方で、送信してから400で弾かれるより
+                    // 入力の時点で打ち止めにする。
+                    maxLength={2000}
+                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="card-detail-due-date" className="text-xs font-semibold text-slate-500">
+                    期日
+                  </label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      id="card-detail-due-date"
+                      type="date"
+                      value={dueDate}
+                      onChange={(event) => setDueDate(event.target.value)}
+                      className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                    />
+                    {/* 編集中の下書き（dueDate）に対して、期限切れ/期限間近をその場で示す
+                        （要件5.6）。ワイヤーフレーム6.2④の「期日: 🔴 2026/07/15」に対応する。 */}
+                    {dueDate !== '' && <DueDateBadge dueDate={dueDate} />}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">ラベル</p>
+                  <div className="mt-1">
+                    <LabelPicker boardId={card.boardId} selectedLabelIds={labelIds} onChange={setLabelIds} />
+                  </div>
+                </div>
+
+                {saveError !== null && <StatusMessage kind="error">{saveError.message}</StatusMessage>}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    // 要件5.2と同じ「タイトルが未入力の間は押せない」という考え方をここにも適用する。
+                    disabled={titleTrimmed === '' || submitting}
+                    title={titleTrimmed === '' ? 'タイトルを入力してください' : undefined}
+                    className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                  >
+                    {submitting ? '保存中…' : '保存'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          {/* cardがnullの間（読み込み中）はisArchivedを参照できずボタンのラベルを決められないため、
+              フォーム本体と同じくcard !== nullの間だけ描画する。 */}
+          {card !== null && (
+            <footer className="flex items-center justify-between gap-3 border-t border-slate-200 p-4">
+              <button
+                type="button"
+                onClick={handleArchiveToggle}
+                // 「完了」ステータスのカードのみアーカイブできる（プロトタイプprototype/app.jsの
+                // populateCardModalと同じ業務ルール。バックエンドCardService.updateArchivedも
+                // 同じ制約を検証しており、ここでの無効化はサーバーへの無駄なリクエストを防ぐための
+                // 先回りに過ぎない）。復元（isArchived=trueから戻す）にはこの制約が無い。
+                // disabledの判定はcard.status（サーバーに永続化されている値）で行う。アーカイブは
+                // 「保存」を経由しない独立した即時操作であり、バックエンドも永続化された値しか
+                // 見ないため、活性・非活性はドラフトではなくサーバー側の実際の値に合わせる。
+                disabled={archiving || (!card.isArchived && card.status !== 'done')}
+                title={
+                  !card.isArchived && card.status !== 'done'
+                    ? // ただしツールチップの文言だけはドラフトのstatusも見る。そうしないと、
+                      // <select>で「完了」を選んだ直後（まだ保存前）もボタンは無効のままなのに
+                      // 「完了ステータスのカードのみアーカイブできます」という、選んだ内容と
+                      // 矛盾する文言が出続けてしまう。
+                      status === 'done'
+                      ? 'ステータスの変更を「保存」してからアーカイブできます'
+                      : '完了ステータスのカードのみアーカイブできます'
+                    : undefined
+                }
+                className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {archiving ? '処理中…' : card.isArchived ? '復元' : 'アーカイブ'}
+              </button>
+              {archiveError !== null && (
+                <StatusMessage kind="error">{archiveError.message}</StatusMessage>
+              )}
+            </footer>
+          )}
+        </div>
       </div>
-    </div>
+    </dialog>
   )
 }
 
