@@ -192,14 +192,14 @@ function SortableBoardRow({
               type="button"
               onClick={handleSaveRename}
               disabled={draftName.trim() === '' || renaming}
-              className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+              className="cursor-pointer rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
             >
               保存
             </button>
             <button
               type="button"
               onClick={onEndRename}
-              className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+              className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
             >
               キャンセル
             </button>
@@ -248,7 +248,7 @@ function SortableBoardRow({
             disabled={isFirst}
             title="上へ"
             aria-label={`「${board.name}」を1つ上へ`}
-            className="leading-none text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:text-slate-300"
+            className="cursor-pointer leading-none text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:text-slate-300"
           >
             ▲
           </button>
@@ -258,7 +258,7 @@ function SortableBoardRow({
             disabled={isLast}
             title="下へ"
             aria-label={`「${board.name}」を1つ下へ`}
-            className="leading-none text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:text-slate-300"
+            className="cursor-pointer leading-none text-slate-500 hover:text-slate-800 disabled:cursor-not-allowed disabled:text-slate-300"
           >
             ▼
           </button>
@@ -268,7 +268,7 @@ function SortableBoardRow({
           <button
             type="button"
             onClick={() => onStartRename(board.id)}
-            className="rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+            className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
           >
             改名
           </button>
@@ -276,7 +276,7 @@ function SortableBoardRow({
             type="button"
             onClick={handleDeleteClick}
             disabled={deleting}
-            className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+            className="cursor-pointer rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
           >
             削除
           </button>

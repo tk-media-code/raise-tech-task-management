@@ -27,7 +27,7 @@ function NotFoundView() {
           <a href>ではなく<Link>を使う理由はdocs/react/05-router.md 13章参照。 */}
       <Link
         to="/"
-        className="mt-4 inline-block rounded border border-slate-300 bg-white px-4 py-2 text-sm text-blue-600 hover:bg-slate-50"
+        className="mt-4 inline-block cursor-pointer rounded border border-slate-300 bg-white px-4 py-2 text-sm text-blue-600 hover:bg-slate-50"
       >
         横断ビューへ戻る
       </Link>

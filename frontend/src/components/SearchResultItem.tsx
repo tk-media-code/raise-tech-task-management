@@ -22,7 +22,8 @@ function SearchResultItem({ card, onSelect }: Props) {
     <button
       type="button"
       onClick={() => onSelect(card.id)}
-      className="w-full rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:border-slate-300 hover:shadow"
+      // CardItem と同じホバー（背景・枠・影・指カーソル）で、クリックして詳細を開ける行だと分かるようにする。
+      className="w-full cursor-pointer rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition-all duration-150 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md"
     >
       <p className="text-sm font-medium text-slate-800">{card.title}</p>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">

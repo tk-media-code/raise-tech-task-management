@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { apiPaths } from '../api/client'
 import CardDetailModal from '../components/CardDetailModal'
 import LabelFilterBar from '../components/LabelFilterBar'
 import SearchResultItem from '../components/SearchResultItem'
 import StatusMessage from '../components/StatusMessage'
+import SubpageHeader from '../components/SubpageHeader'
 import { useApi } from '../hooks/useApi'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import type { BoardResponse, CardResponse } from '../types/api'
@@ -22,11 +23,6 @@ function parseLabelIds(params: URLSearchParams): number[] {
   return raw.split(',').map(Number)
 }
 
-/** App.tsxの<Link to="/search" state={...}>から渡される、遷移元のパス情報 */
-type SearchLocationState = {
-  from?: string
-}
-
 type Props = {
   /**
    * App.tsxが取得済みのボード一覧。この画面自身は使わず、ラベル絞り込みUI
@@ -38,6 +34,8 @@ type Props = {
   boardsLoading: boolean
   /** ボード一覧の取得に失敗した場合のエラー（同上、LabelFilterBarへ中継する） */
   boardsError: Error | null
+  /** ヘッダーで選択中のボードに対応する一覧画面へのパス（App.tsx から渡される） */
+  boardListPath: string
 }
 
 /**
@@ -51,28 +49,12 @@ type Props = {
  * 検索条件（キーワード・ラベル）は component の state ではなくURLクエリパラメータ
  * （useSearchParams）に持たせている。ブックマーク・リロードで条件が消えないことに加え、
  * ブラウザの戻る/進むで絞り込みの変更履歴を辿れるようにするため
- * （components/BoardSelect.tsxがuseMatchでURLを「唯一の真実」にしているのと同じ考え方を、
- * 検索条件という別の状態にも広げている）。
+ * 以前は「検索を開く直前の画面」へ戻す仕様だったが、ヘッダーのボード選択に合わせて
+ * 横断ビュー（/）またはボード詳細（/boards/:id）へ戻すように変更した（boardListPath）。
  */
-function SearchView({ boards, boardsLoading, boardsError }: Props) {
+function SearchView({ boards, boardsLoading, boardsError, boardListPath }: Props) {
   const navigate = useNavigate()
-  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-
-  // 「← 戻る」の遷移先。検索中に打鍵・ラベル選択のたびに履歴エントリが積まれていくため
-  // （下記のURL同期を参照）、単純にnavigate(-1)で1つ前に戻ると、検索を開く前の画面ではなく
-  // 「1つ前の絞り込み状態」に着地してしまう。App.tsxの<Link to="/search">がstateとして
-  // 渡した「検索を開く直前のパス」へ直接navigateすることで、何回検索条件を変えていても
-  // 1回のクリックで元の画面に戻れるようにしている。
-  // /search?q=... を直接開いた場合などstateが無いときは、アプリの入口である横断ビュー（/）
-  // へ戻す。
-  //
-  // useState(() => ...)の遅延初期化で「マウント時の1回だけ」location.stateから読み取り、
-  // 以後はこのローカルstateを正とする。react-routerのsetSearchParamsは、何も指定しなければ
-  // 新しく積む履歴エントリにstateを引き継いでくれない（前のエントリのstateが消える）ため、
-  // 検索中に何度URLが変わってもfromPathを見失わないよう、値そのものをここで固定しておき、
-  // 以降のsetSearchParams呼び出し（下記）ではこの値を毎回stateとして明示的に渡し直す。
-  const [fromPath] = useState(() => (location.state as SearchLocationState | null)?.from ?? '/')
 
   const keywordInUrl = searchParams.get('q') ?? ''
   const labelIdsInUrl = parseLabelIds(searchParams)
@@ -128,9 +110,6 @@ function SearchView({ boards, boardsLoading, boardsError }: Props) {
         else next.set('q', debouncedKeyword)
         return next
       },
-      // stateを明示的に渡し直さないと、この呼び出しで新しく積む履歴エントリの
-      // location.stateがnullになり、fromPath（「← 戻る」の行き先）を見失ってしまう。
-      { state: { from: fromPath } satisfies SearchLocationState },
     )
     // replace指定はしていない（＝既定のpush）。debounceで打鍵ごとの連発は防げているため、
     // 確定した検索条件の変化ごとに履歴へ積んでよく、それによってブラウザの戻る/進むで
@@ -138,14 +117,12 @@ function SearchView({ boards, boardsLoading, boardsError }: Props) {
     //
     // keywordInUrlとsetSearchParamsを意図的に依存配列から外している。理由は上記(1)(2)のとおりで、
     // どちらも含めると「戻る操作との競合」や「無関係なURL変更での余分な履歴」を招く。
-    // fromPathはuseStateの初期値のまま変わらない値なので、依存配列に入れても入れなくても
-    // 再実行のタイミングに影響しないが、実際に参照している値として明記しておく。
     //
     // 上記のとおり意図的な省略であることを、ルールに対しても明示する。
     // ESLintは導入していないため接頭辞はoxlint-（.oxlintrc.jsonで
     // react-hooks/exhaustive-depsをerrorとして有効化している）。
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedKeyword, fromPath])
+  }, [debouncedKeyword])
 
   /** ラベルチップがクリックされたとき、選択中なら外し、そうでなければ加える */
   function toggleLabel(labelId: number) {
@@ -160,8 +137,6 @@ function SearchView({ boards, boardsLoading, boardsError }: Props) {
         else next.set('labels', updated.join(','))
         return next
       },
-      // キーワードの確定時と同じ理由で、fromPathを次の履歴エントリにも引き継ぐ。
-      { state: { from: fromPath } satisfies SearchLocationState },
     )
   }
 
@@ -204,16 +179,7 @@ function SearchView({ boards, boardsLoading, boardsError }: Props) {
 
   return (
     <section>
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(fromPath)}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          ← 戻る
-        </button>
-        <h2 className="text-lg font-semibold">🔍 検索</h2>
-      </div>
+      <SubpageHeader title="タスク検索" onBack={() => navigate(boardListPath)} />
 
       <input
         type="text"

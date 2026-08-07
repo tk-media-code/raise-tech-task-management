@@ -79,7 +79,9 @@ function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
       // ドラッグ中の元位置は半透明にする（実際に指に追従する見た目はCardDragPreview＝
       // <DragOverlay>が担うため、元の位置は「ここから動かしている最中」と分かる程度の
       // 表示で十分）。relativeは、下の挿入ライン（absolute配置）の基準位置にするため。
-      className={`relative w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition hover:border-slate-300 hover:shadow ${isDragging ? 'opacity-40' : ''}`}
+      // ホバーで背景・枠・影をはっきり変え、クリックして詳細を開けるカードだと分かるようにする
+      // （hover:shadow だけでは白地の上で変化が弱く、矢印カーソルのままだと押せる感が出にくい）。
+      className={`relative w-full cursor-pointer rounded-lg border border-slate-200 bg-white p-3 shadow-sm transition-all duration-150 hover:border-slate-400 hover:bg-slate-50 hover:shadow-md ${isDragging ? 'cursor-grabbing opacity-40' : ''}`}
     >
       {showDropLine && (
         // ドラッグ中、このカードの直前に挿入されようとしていることを示すライン。
@@ -94,7 +96,7 @@ function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
       <button
         type="button"
         onClick={() => onSelect(card.id)}
-        className="block w-full text-left"
+        className="block w-full cursor-pointer text-left"
       >
         <p className="text-sm font-medium text-slate-800">{card.title}</p>
 
@@ -135,7 +137,7 @@ function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
         onChange={handleMove}
         disabled={submitting}
         aria-label={`「${card.title}」の移動先`}
-        className="mt-2 w-full rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:opacity-50 md:hidden"
+        className="mt-2 w-full cursor-pointer rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
       >
         <option value="" disabled>
           移動 ▾

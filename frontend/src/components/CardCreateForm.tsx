@@ -64,7 +64,7 @@ function CardCreateForm({ boardId, onCreated }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-lg border border-dashed border-slate-300 p-3 text-center text-sm text-slate-500 transition hover:border-slate-400 hover:bg-slate-50"
+        className="w-full cursor-pointer rounded-lg border border-dashed border-slate-300 p-3 text-center text-sm text-slate-500 transition hover:border-slate-400 hover:bg-slate-50"
       >
         ＋ カードを追加
       </button>
@@ -156,14 +156,14 @@ function CardCreateForm({ boardId, onCreated }: Props) {
           // 前後の空白だけのタイトルも「未入力」とみなすため、trim()してから判定する。
           disabled={title.trim() === '' || submitting}
           title={title.trim() === '' ? 'タイトルを入力してください' : undefined}
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+          className="cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
         >
           {submitting ? '追加中…' : '追加'}
         </button>
         <button
           type="button"
           onClick={resetAndClose}
-          className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
         >
           キャンセル
         </button>

@@ -50,7 +50,7 @@ const noSorting: SortingStrategy = () => null
 const boardCollisionDetection: CollisionDetection = closestCenter
 
 /**
- * ボード管理モーダル（要件定義 6.2 ②）。ヘッダーの `⚙` から開く。
+ * ボード管理モーダル（要件定義 6.2 ②）。ヘッダーの「ボード管理」から開く。
  * ボードの新規作成・名称変更・削除・並べ替え、すべてこのモーダルの中で行う。
  *
  * 構造・開閉の作法はCardDetailModal.tsxを踏襲している
@@ -167,7 +167,7 @@ function BoardManageModal({ open, boards, onChanged, onDeleted, onClose }: Props
               type="button"
               onClick={onClose}
               aria-label="閉じる"
-              className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
+              className="cursor-pointer rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
             >
               ×
             </button>
@@ -228,7 +228,7 @@ function BoardManageModal({ open, boards, onChanged, onDeleted, onClose }: Props
                 type="submit"
                 disabled={name.trim() === '' || submitting}
                 title={name.trim() === '' ? 'ボード名を入力してください' : undefined}
-                className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                className="cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
               >
                 ＋ 追加
               </button>

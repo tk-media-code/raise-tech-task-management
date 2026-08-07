@@ -302,7 +302,7 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
               type="button"
               onClick={onClose}
               aria-label="閉じる"
-              className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
+              className="cursor-pointer rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
             >
               ×
             </button>
@@ -348,7 +348,7 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                     // 選べてしまってから保存時にエラーを見せるのではなく、操作自体を塞いで
                     // 下のヒント文で理由を伝える（アーカイブ画面からもこのモーダルは開ける）。
                     disabled={submitting || card.isArchived}
-                    className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
+                    className="mt-1 w-full cursor-pointer rounded border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                   >
                     {/* mapの引数名をstatusにすると、上で定義した下書きstate変数のstatusを
                         覆い隠して紛らわしいため、optionという別名にする（中身は同じくCardStatus）。 */}
@@ -427,7 +427,7 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                     // 要件5.2と同じ「タイトルが未入力の間は押せない」という考え方をここにも適用する。
                     disabled={titleTrimmed === '' || submitting}
                     title={titleTrimmed === '' ? 'タイトルを入力してください' : undefined}
-                    className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+                    className="cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
                   >
                     {submitting ? '保存中…' : '保存'}
                   </button>
@@ -437,32 +437,19 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
           </div>
 
           {/* cardがnullの間（読み込み中）はisArchivedを参照できずボタンのラベルを決められないため、
-              フォーム本体と同じくcard !== nullの間だけ描画する。 */}
-          {card !== null && (
+              フォーム本体と同じくcard !== nullの間だけ描画する。
+              アーカイブは「完了」カードだけ、復元はアーカイブ済みカードだけ——
+              押せない状態のボタンを置かず、該当するときだけフッターを出す。 */}
+          {card !== null && (card.isArchived || card.status === 'done') && (
             <footer className="flex items-center justify-between gap-3 border-t border-slate-200 p-4">
               <button
                 type="button"
                 onClick={handleArchiveToggle}
                 // 「完了」ステータスのカードのみアーカイブできる（プロトタイプprototype/app.jsの
                 // populateCardModalと同じ業務ルール。バックエンドCardService.updateArchivedも
-                // 同じ制約を検証しており、ここでの無効化はサーバーへの無駄なリクエストを防ぐための
-                // 先回りに過ぎない）。復元（isArchived=trueから戻す）にはこの制約が無い。
-                // disabledの判定はcard.status（サーバーに永続化されている値）で行う。アーカイブは
-                // 「保存」を経由しない独立した即時操作であり、バックエンドも永続化された値しか
-                // 見ないため、活性・非活性はドラフトではなくサーバー側の実際の値に合わせる。
-                disabled={archiving || (!card.isArchived && card.status !== 'done')}
-                title={
-                  !card.isArchived && card.status !== 'done'
-                    ? // ただしツールチップの文言だけはドラフトのstatusも見る。そうしないと、
-                      // <select>で「完了」を選んだ直後（まだ保存前）もボタンは無効のままなのに
-                      // 「完了ステータスのカードのみアーカイブできます」という、選んだ内容と
-                      // 矛盾する文言が出続けてしまう。
-                      status === 'done'
-                      ? 'ステータスの変更を「保存」してからアーカイブできます'
-                      : '完了ステータスのカードのみアーカイブできます'
-                    : undefined
-                }
-                className="rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                // 同じ制約を検証する）。復元（isArchived=trueから戻す）にはこの制約が無い。
+                disabled={archiving}
+                className="cursor-pointer rounded border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {archiving ? '処理中…' : card.isArchived ? '復元' : 'アーカイブ'}
               </button>
