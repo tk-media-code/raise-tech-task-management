@@ -58,11 +58,11 @@ useEffect(() => {
   setDraftName(board.name)
   nameInputRef.current?.focus()
   nameInputRef.current?.select()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
 }, [isRenaming])
 ```
 
-`SortableBoardRow`自体は`isRenaming`が`false`⇔`true`と切り替わるだけで、アンマウント・再マウントはされません。[22章](./09-editing-and-drag-and-drop.md#22-カード詳細モーダルを編集可能にする)の`CardDetailModal`が「`card`（オブジェクトそのもの）が変わるたび下書きを詰め直す」設計だったのに対し、ここでは依存配列を`isRenaming`だけにし、`board.name`をあえて外しています。もし`board.name`も依存に含めると、編集中に（例えば他の行の並べ替えによる）`refetch`が走っただけでこの`effect`が再実行され、ユーザーが入力途中の文字列を`setDraftName(board.name)`が上書きしてしまいます。「編集に入った、その瞬間の名前で1回だけ揃える」ことが目的であり、以後`board.name`が変わっても追従させたくないため、意図的な依存配列の絞り込みとして`eslint-disable-next-line`を添えています（同種の判断は[pages/SearchView.tsx](../../frontend/src/pages/SearchView.tsx)にも既に存在します）。
+`SortableBoardRow`自体は`isRenaming`が`false`⇔`true`と切り替わるだけで、アンマウント・再マウントはされません。[22章](./09-editing-and-drag-and-drop.md#22-カード詳細モーダルを編集可能にする)の`CardDetailModal`が「`card`（オブジェクトそのもの）が変わるたび下書きを詰め直す」設計だったのに対し、ここでは依存配列を`isRenaming`だけにし、`board.name`をあえて外しています。もし`board.name`も依存に含めると、編集中に（例えば他の行の並べ替えによる）`refetch`が走っただけでこの`effect`が再実行され、ユーザーが入力途中の文字列を`setDraftName(board.name)`が上書きしてしまいます。「編集に入った、その瞬間の名前で1回だけ揃える」ことが目的であり、以後`board.name`が変わっても追従させたくないため、意図的な依存配列の絞り込みとして`oxlint-disable-next-line`を添えています（同種の判断は[pages/SearchView.tsx](../../frontend/src/pages/SearchView.tsx)にも既に存在します）。このコメントは飾りではなく、`react-hooks/exhaustive-deps`を有効化した今、実際にこの箇所の検出を抑制しています（[33章](./07-build-tooling.md#33-oxlintの設定強化)参照）。
 
 ### ドラッグとの整合性
 

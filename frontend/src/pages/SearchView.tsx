@@ -140,7 +140,11 @@ function SearchView({ boards, boardsLoading, boardsError }: Props) {
     // どちらも含めると「戻る操作との競合」や「無関係なURL変更での余分な履歴」を招く。
     // fromPathはuseStateの初期値のまま変わらない値なので、依存配列に入れても入れなくても
     // 再実行のタイミングに影響しないが、実際に参照している値として明記しておく。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //
+    // 上記のとおり意図的な省略であることを、ルールに対しても明示する。
+    // ESLintは導入していないため接頭辞はoxlint-（.oxlintrc.jsonで
+    // react-hooks/exhaustive-depsをerrorとして有効化している）。
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKeyword, fromPath])
 
   /** ラベルチップがクリックされたとき、選択中なら外し、そうでなければ加える */
