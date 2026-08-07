@@ -145,7 +145,16 @@ function CardCreateForm({ boardId, onCreated }: Props) {
         className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
       />
 
-      <LabelPicker boardId={boardId} selectedLabelIds={selectedLabelIds} onChange={setSelectedLabelIds} />
+      {/* onLabelDeletedにonCreatedをそのまま渡す。ラベル削除はカード作成とは別の操作だが、
+          「呼び出し元（BoardDetailView）の一覧を再取得してもらう」という効果は同じであり、
+          専用のコールバックを新設せず既存のonCreatedに相乗りさせている
+          （components/LabelPicker.tsxのonLabelDeletedのdocblock参照）。 */}
+      <LabelPicker
+        boardId={boardId}
+        selectedLabelIds={selectedLabelIds}
+        onChange={setSelectedLabelIds}
+        onLabelDeleted={onCreated}
+      />
 
       {error !== null && <StatusMessage kind="error">{error.message}</StatusMessage>}
 

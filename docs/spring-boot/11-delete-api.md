@@ -2,7 +2,7 @@
 
 [← 学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **40〜42章** をまとめています。
+> 元の学習ドキュメントにおける **40〜42章、45章** をまとめています。
 
 ---
 
@@ -177,6 +177,49 @@ cardRepository.delete(card);
 39章・41章で見た「詰め直さない」という判断は、ここではさらに一歩踏み込んだ形で成り立ちます。アーカイブ済みのカードは、列の表示順を決める`findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc`（38章）の対象から、アーカイブされた時点で既に外れています。つまりこのカードを完全に削除しても、画面に表示されている列に**新たな**欠番が生まれることはありません（欠番は、アーカイブされた時点で既にできています）。「次に触ったときに正しくなればよい」という考え方を通り越して、「そもそも触る対象ではなくなっている」という状態です。
 
 📄 実装：`backend/.../service/CardService.java`の`delete`、`backend/.../controller/CardController.java`の`delete`
+
+---
+
+## 45. ボード配下リソースの削除——所属確認を伴う削除
+
+ラベル削除（`DELETE /api/boards/{boardId}/labels/{labelId}`）で、3本目の`@DeleteMapping`が登場します。40〜42章で見た2つの削除（ボード削除・カードの完全削除）のどちらとも少しずつ違う、新しい形の判断が必要になります。
+
+```java
+@Transactional
+public void deleteLabel(Integer boardId, Integer labelId) {
+	if (!labelRepository.existsByBoardIdAndId(boardId, labelId)) {
+		throw new ResourceNotFoundException(
+				"ラベルが見つかりません（boardId=" + boardId + ", id=" + labelId + "）");
+	}
+	labelRepository.deleteById(labelId);
+}
+```
+
+### 40章・42章のハイブリッド
+
+40章のボード削除は`existsById(id)`という「そのIDが存在するか」だけの確認で足りました。URLが`/api/boards/{id}`で、対象を一意に決める手がかりが`id`1つしか無いためです。一方、ラベルのURLは`/api/boards/{boardId}/labels/{labelId}`と、パス変数を2つ持ちます。ここで`labelRepository.existsById(labelId)`（`boardId`を見ない）だけを確認してしまうと、「実在はするが、指定したボードには属していない他ボードのラベルID」を渡された場合でも削除が成立してしまい、URLの`{boardId}`部分が何の意味も持たなくなってしまいます。
+
+そこで使うのが`existsByBoardIdAndId(boardId, labelId)`（`LabelRepository`）です。これは18章のクエリメソッドの応用で、`board_id = ? and id = ?`という2条件のAND検索を、メソッド名だけで組み立てています。`findByBoardIdAndIdIn`（32章、カード新規作成時のラベルID検証）が「一覧を取得してJava側で件数を比較する」ことで同じ種類の不整合（他ボードのIDの紛れ込み）を検出していたのに対し、こちらは1件の存在確認で済むぶん`existsByBoardIdAndName`（32章）と同じ「軽量な確認で足りる」パターンに当てはまります。
+
+「行の中身を読む必要が無いので`existsById`系で足りる」という判断基準そのものは40章と同じですが、確認する条件が`id`単独ではなく`(boardId, id)`の組になっている点が、42章で見た「もう一段深い判断が必要になる」という構造と重なります。42章はその一段深さを`isArchived`という**行の値**で表現していましたが、ここでは**所属関係**（このラベルは本当にこのボードのものか）で表現している、という違いです。
+
+### 使用中のラベルも削除できる——42章とは逆の判断
+
+42章のカード完全削除は「アーカイブ済みのカードのみ削除できる」という状態による制限がありました。ラベル削除にはこの種の制限を設けていません。カードに付与済み（使用中）のラベルであっても、そのまま削除できます。これは実装上の制約ではなく、意図的な仕様判断です（要件定義5.5）。削除すると、そのラベルが付いていた**すべての**カードから、41章で見たDBの`ON DELETE CASCADE`によって自動的に外れます。
+
+```java
+labelRepository.deleteById(labelId);
+// card_label行はここで明示的に削除しない。Label.board・CardLabel.label双方に付いた
+// @OnDelete(CASCADE)によりDB側の外部キー制約で連鎖削除されるため。
+```
+
+41章のボード削除・42章のカード完全削除に続く3例目の「カスケードはDBに任せる」実装です。`Label`はボード単位で複数のカードから共有される独立したリソースであるため、削除の影響範囲（何枚のカードから外れるか）はカードごとに異なります。この「影響範囲がリクエストの時点では分からない」という性質のため、フロントエンド側は削除を実行する前に`GET /api/cards?labelIds={labelId}`で該当カードを数え、確認UIに件数を表示しています（`frontend/src/components/LabelPicker.tsx`の`countCardsForLabel`。実装は[docs/react/11-card-deletion.md](../react/11-card-deletion.md)参照）。バックエンド側のレスポンス（`LabelResponse`）に件数フィールドを持たせる案もありましたが、カード1件を表示するたびに毎回集計が走る`CardResponse.labels`側のマッピング処理を汚さずに済むよう、件数取得は削除確認という低頻度な操作のためだけにフロントエンドから既存の一覧APIを呼ぶ形にしています。
+
+### `LabelController`を新設しない理由
+
+`GET /api/boards/{id}/labels`・`POST /api/boards/{id}/labels`（32章）は`BoardController`に実装されており、`DELETE /api/boards/{id}/labels/{labelId}`もここに追加しました。ラベルは`Label`という独立したエンティティですが、常に「あるボードに属するリソース」としてのみ存在し、`/api/labels/{id}`のような単独のURLは用意していません（22章で見たDTOと同じく、URLの形もリソースの所属関係を表しています）。この非対称性——ボードは`/api/boards/{id}`で単独アクセスできるのに、ラベルは必ず`/api/boards/{boardId}/labels/{labelId}`という親子構造の中でしかアクセスできない——は、「ラベルはボードという文脈が無ければ意味を持たない」という業務上の性質をそのままURL設計に反映した結果です。
+
+📄 実装：`backend/.../repository/LabelRepository.java`の`existsByBoardIdAndId`、`backend/.../service/BoardService.java`の`deleteLabel`、`backend/.../controller/BoardController.java`の`deleteLabel`
 
 ---
 

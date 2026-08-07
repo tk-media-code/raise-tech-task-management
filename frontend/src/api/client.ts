@@ -274,6 +274,13 @@ export const apiPaths = {
   boardLabels: (boardId: number | string) => `/api/boards/${boardId}/labels`,
 
   /**
+   * ボード配下のラベル1件（DELETE {@code /api/boards/{boardId}/labels/{labelId}} で使う）。
+   * boardLabels(boardId)が一覧（GET/POST共用）を指すのに対し、こちらは単体を指す。
+   */
+  label: (boardId: number | string, labelId: number | string) =>
+    `/api/boards/${boardId}/labels/${labelId}`,
+
+  /**
    * カード新規作成（POST）先のパス。
    * cards()と同じ"/api/cards"だが、cards()は一覧取得用にarchived等のクエリを必ず付ける関数のため
    * 流用せず、書き込み用に引数を取らない別関数として分けている。

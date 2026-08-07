@@ -30,6 +30,7 @@
 | 40〜42章 | 削除API（DELETE）・DBレベルのカスケード削除・状態に依存する削除可否 | [11-delete-api.md](./11-delete-api.md) |
 | 43章 | 静的解析ツールの導入（-Xlint・SpotBugs・Checkstyle） | [02-build-config.md](./02-build-config.md) |
 | 44章 | 自動テスト（JUnit 5・Mockito・MockMvc） | [12-testing.md](./12-testing.md) |
+| 45章 | ボード配下リソースの削除（所属確認を伴う削除） | [11-delete-api.md](./11-delete-api.md) |
 
 ## 目次
 
@@ -77,6 +78,7 @@
 42. [削除の可否を状態で決める——「在るか」だけでは足りないとき](./11-delete-api.md#42-削除の可否を状態で決める在るかだけでは足りないとき)
 43. [静的解析ツールの導入](./02-build-config.md#43-静的解析ツールの導入)
 44. [自動テスト：業務ルールをコードで守る](./12-testing.md#44-自動テスト業務ルールをコードで守る)
+45. [ボード配下リソースの削除——所属確認を伴う削除](./11-delete-api.md#45-ボード配下リソースの削除所属確認を伴う削除)
 
 ---
 
@@ -429,6 +431,14 @@ PUT・PATCHの実装にあわせて`CorsConfig`の`allowedMethods`を更新す�
 「壊れても画面はそれらしく動いてしまう」業務ルール（アーカイブ可否・削除可否・positionの振り直しなど）を、手動の`curl`確認からテストコードへ移しました。Testcontainersを使えない環境（コンテナ内からDocker socketが見えない）で何ならできるかを考え、Mockitoによる Service層の単体テストと、`@WebMvcTest`によるController層のスライステストという、DBに依存しない2層から始めています。`@InjectMocks`がコンストラクタインジェクションの利点をそのまま利用していること、`verify(never())`で「呼ばれなかったこと」＝検証の順序という設計判断を守れること、そして**わざと実装を壊して狙ったテストだけが赤くなるか**を確かめた結果も扱います。
 
 📄 詳細：[12-testing.md](./12-testing.md#44-自動テスト業務ルールをコードで守る)
+
+---
+
+## 45. ボード配下リソースの削除——所属確認を伴う削除
+
+ラベル削除（`DELETE /api/boards/{boardId}/labels/{labelId}`）を教材に、URLがパス変数を2つ持つ（`boardId`・`labelId`）場合の存在確認の書き方（`existsByBoardIdAndId`）、使用中のラベルも削除を許可する仕様判断とDBの`ON DELETE CASCADE`による連鎖削除、`LabelController`を新設せず`BoardController`にまとめている理由を解説します。
+
+📄 詳細：[11-delete-api.md](./11-delete-api.md#45-ボード配下リソースの削除所属確認を伴う削除)
 
 ---
 

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { apiPaths } from '../api/client'
+import { apiPaths, fetchJson } from '../api/client'
 import { useApi } from '../hooks/useApi'
+import { useDelete } from '../hooks/useDelete'
 import { useMutation } from '../hooks/useMutation'
 import { LABEL_COLORS } from '../lib/labelColors'
-import type { LabelCreateRequest, LabelResponse } from '../types/api'
+import type { CardResponse, LabelCreateRequest, LabelResponse } from '../types/api'
 import ColorSwatchPicker from './ColorSwatchPicker'
 import LabelToggleChip from './LabelToggleChip'
 import StatusMessage from './StatusMessage'
@@ -15,6 +16,14 @@ type Props = {
   selectedLabelIds: number[]
   /** 選択状態が変わったとき（トグル・新規作成による自動選択）に呼ばれる */
   onChange: (labelIds: number[]) => void
+  /**
+   * ラベル削除に成功したときに呼ばれる。このLabelPicker自身が持つラベル一覧はrefetchLabelsで
+   * 更新するが、同じ画面内の他のカード表示（削除したラベルを持っていた可能性がある）は
+   * 別のuseApiインスタンスのため、このLabelPicker単体では最新化できない。呼び出し元
+   * （CardCreateForm・CardDetailModal）が既に持つ一覧再取得コールバック（onCreated・onUpdated）
+   * をそのまま渡してもらうことで、新しい配線を増やさずに反映させる。
+   */
+  onLabelDeleted: () => void
 }
 
 /**
@@ -34,13 +43,18 @@ type Props = {
  * 「今ラベルが必要になった」という合図になる（閉じればアンマウントされ、useApiの通信も
  * 後片付けされる）。
  */
-function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
+function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Props) {
   // ラベル新規作成の折りたたみと入力欄。この状態がこのコンポーネント自身に閉じているため、
   // 呼び出し元（CardCreateForm等）がこのコンポーネントをアンマウントするだけで
   // （＝フォームを閉じるだけで）自動的に破棄される。個別にリセットするコードは不要。
   const [labelCreatorOpen, setLabelCreatorOpen] = useState(false)
   const [newLabelName, setNewLabelName] = useState('')
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0].hex)
+
+  // 削除確認パネルの対象ラベル。nullなら非表示（＝どの削除ボタンも押されていない状態）。
+  const [deleteTarget, setDeleteTarget] = useState<LabelResponse | null>(null)
+  // 対象ラベルが使われているカードの枚数。取得中はnull（確認パネルの「確認しています…」表示に使う）。
+  const [pendingCardCount, setPendingCardCount] = useState<number | null>(null)
 
   // refetchLabelsは、この下のhandleCreateLabelでラベルを新規作成した直後、一覧を取り直すために使う。
   const { data: labels, refetch: refetchLabels } = useApi<LabelResponse[]>(apiPaths.boardLabels(boardId))
@@ -53,6 +67,17 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
     submitting: creatingLabel,
     error: labelError,
   } = useMutation<LabelCreateRequest, LabelResponse>('POST', apiPaths.boardLabels(boardId))
+
+  // ラベル削除用のuseDelete。deleteTargetが未確定の間（＝確認パネルを開く前）は、
+  // components/CardDetailModal.tsxのsave等と同じく、実害の無いプレースホルダー（空文字列）を
+  // pathへ渡す（hooks/useDelete.tsのpath引数はuseCallbackの依存にしているだけで、
+  // 実際に呼ばれるのはconfirmボタン押下時のremove()呼び出し時点のため、宣言時点で
+  // 対象が確定していなくても問題ない）。
+  const {
+    remove: deleteLabel,
+    submitting: deletingLabel,
+    error: deleteLabelError,
+  } = useDelete(deleteTarget === null ? '' : apiPaths.label(boardId, deleteTarget.id))
 
   function handleToggleLabel(labelId: number) {
     onChange(
@@ -83,6 +108,68 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
     setLabelCreatorOpen(false)
   }
 
+  /**
+   * 指定したラベルが使われているカードの枚数を数える。削除確認パネルの文言
+   * （「このラベルはX枚のカードで使われています」）に使う。
+   * アーカイブ済みのカードも削除の影響（ラベルが外れる）を受けるため、非アーカイブ・
+   * アーカイブ済みの両方を合算する（components/SortableBoardRow.tsxの
+   * countCardsForDeleteConfirmと同じ発想・同じ実装パターン）。
+   */
+  async function countCardsForLabel(labelId: number): Promise<number | null> {
+    try {
+      const controller = new AbortController()
+      const [active, archived] = await Promise.all([
+        fetchJson<CardResponse[]>(
+          apiPaths.cards({ boardId, labelIds: [labelId], archived: false }),
+          controller.signal,
+        ),
+        fetchJson<CardResponse[]>(
+          apiPaths.cards({ boardId, labelIds: [labelId], archived: true }),
+          controller.signal,
+        ),
+      ])
+      return active.length + archived.length
+    } catch {
+      // 件数の取得に失敗しても削除フロー自体は続行する（下のJSXが件数無しの汎用メッセージへ
+      // フォールバックする）。件数が分からないことを理由に削除操作自体をブロックすると、
+      // 件数取得用のGETがたまたま失敗しただけで本来できるはずの削除ができなくなる
+      // （SortableBoardRow.tsxのcountCardsForDeleteConfirmと同じ判断）。
+      return null
+    }
+  }
+
+  function handleRequestDelete(label: LabelResponse) {
+    setDeleteTarget(label)
+    setPendingCardCount(null)
+    void countCardsForLabel(label.id).then(setPendingCardCount)
+  }
+
+  function handleCancelDelete() {
+    setDeleteTarget(null)
+    setPendingCardCount(null)
+  }
+
+  async function handleConfirmDelete() {
+    if (deleteTarget === null) return
+
+    const ok = await deleteLabel()
+    // removeは失敗時にfalseを返す（例外は投げない。hooks/useDelete.ts参照）。失敗時は
+    // deleteLabelErrorに詳細が入るので、ここでは早期returnして確認パネルを開いたままにする
+    // （閉じてしまうとエラーメッセージを表示する場所が無くなるため）。
+    if (!ok) return
+
+    const deletedId = deleteTarget.id
+    setDeleteTarget(null)
+    setPendingCardCount(null)
+    refetchLabels()
+    // 削除したラベルがこのカード（下書き）で選択済みだった場合、選択からも外す。外さないまま
+    // 保存すると、CardService.create/updateの「存在しないラベルIDが含まれる」という400を招く。
+    if (selectedLabelIds.includes(deletedId)) {
+      onChange(selectedLabelIds.filter((id) => id !== deletedId))
+    }
+    onLabelDeleted()
+  }
+
   // labelsが取得できていない間（読み込み中）は何も描画しない。
   // 呼び出し元はこのコンポーネントを「開いている間だけ」描画するので、閉じている間の
   // フェッチ抑止（CardCreateFormが以前持っていたopen ? ... : nullのガード）は不要になった。
@@ -95,15 +182,74 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
           後者まで labels.length > 0 の条件に含めてしまうと、まだラベルが1つも無いボードで
           最初のラベルを作る入り口自体が無くなってしまうため。 */}
       {labels.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        // gap をやや広めに取るのは、× がチップ右上へはみ出すぶん、隣のチップと重ならないようにするため。
+        <div className="flex flex-wrap gap-x-2.5 gap-y-2 pt-1">
           {labels.map((label) => (
-            <LabelToggleChip
-              key={label.id}
-              label={label}
-              selected={selectedLabelIds.includes(label.id)}
-              onToggle={handleToggleLabel}
-            />
+            // LabelToggleChip自体は<button>1個で成り立っており（<button>の入れ子はHTML上
+            // 不可能）、この relative な枠の上に削除ボタンを絶対配置する。横並びだと「どの
+            // ラベルの×か」が隣のチップと紛らわしいため、チップ右上に重ねて所属を示す。
+            // LabelToggleChipはLabelFilterBar.tsx（検索画面の絞り込みUI）でも使われており、
+            // そちらには削除UIを出したくないため、変更をLabelToggleChip自体には入れず
+            // LabelPicker側に閉じている。
+            <div key={label.id} className="relative">
+              <LabelToggleChip
+                label={label}
+                selected={selectedLabelIds.includes(label.id)}
+                onToggle={handleToggleLabel}
+              />
+              <button
+                type="button"
+                onClick={() => handleRequestDelete(label)}
+                aria-label={`ラベル「${label.name}」を削除`}
+                title="ラベルを削除"
+                // -right / -top ではみ出させてチップ右上に乗せる。白地＋細い枠で、塗りつぶし
+                // チップの上でも×が見えるようにする（色付き背景に直接置くとコントラストが落ちる）。
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] leading-none text-slate-500 shadow-sm hover:border-red-300 hover:bg-red-50 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
           ))}
+        </div>
+      )}
+
+      {/* 削除確認パネル。要件5.5の「削除前に影響件数を示す」に対応する。ネイティブ<dialog>による
+          モーダルにはしていない。CardDetailModal（既に<dialog>で開いている画面）からこの
+          LabelPickerを使う場合、モーダルの中からさらにモーダルを開く「入れ子」構成になり、
+          本プロジェクトにまだ無いパターンを持ち込むことになるため、あえてこの折りたたみパネルと
+          同じ「フラグに応じてdiv要素を出し入れする」だけの、よりシンプルな方式に揃えた。 */}
+      {deleteTarget !== null && (
+        <div className="flex flex-col gap-2 rounded border border-red-200 bg-red-50 p-2 text-xs">
+          <p>
+            「{deleteTarget.name}」を削除しますか？
+            {pendingCardCount === null
+              ? ' 使用状況を確認しています…'
+              : pendingCardCount > 0
+                ? ` このラベルは${pendingCardCount}枚のカードで使われています。削除すると、これらのカードから自動的に外れます。`
+                : ' このラベルはどのカードにも使われていません。'}
+            この操作は取り消せません。
+          </p>
+          {deleteLabelError !== null && <StatusMessage kind="error">{deleteLabelError.message}</StatusMessage>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              // 件数取得中（pendingCardCount === null）でもこのボタン自体は非活性にしない。
+              // countCardsForLabelと同じ「件数が分からないことを理由に削除操作をブロックしない」
+              // という判断（SortableBoardRow.tsx参照）。
+              disabled={deletingLabel}
+              className="cursor-pointer rounded bg-red-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              {deletingLabel ? '削除中…' : '削除する'}
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelDelete}
+              className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              キャンセル
+            </button>
+          </div>
         </div>
       )}
 

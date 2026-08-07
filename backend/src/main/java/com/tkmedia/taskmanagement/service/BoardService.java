@@ -256,6 +256,31 @@ public class BoardService {
 		return toResponse(saved);
 	}
 
+	/**
+	 * 指定ボードのラベルを削除する（物理削除）。
+	 *
+	 * @param boardId 所属先ボードのID
+	 * @param labelId 削除対象のラベルID
+	 * @throws ResourceNotFoundException 指定ボードに指定IDのラベルが存在しない場合
+	 *                                   （ボード自体が存在しない場合・他ボードのラベルIDを指定した場合を含む）
+	 */
+	// existsByBoardIdAndIdで確認してからdeleteByIdする形は、このクラスのdelete（ボード削除）と同じ
+	// 考え方。findById（エンティティ実体の取得）ではなくexistsByIdを選んでいるのは、削除にあたって
+	// Labelのフィールドを一切使わない（deleteById(labelId)はID値だけで完結する）ため。
+	//
+	// 使用中（カードに付与済み）のラベルも削除対象にできる。紐づくcard_labelの行は、このメソッドが
+	// 明示的に消さなくても、Label.board・CardLabel.label双方に付けた@OnDelete(CASCADE)により
+	// DB側のON DELETE CASCADEで連動して削除される（このクラスのdelete・CardService.deleteに続く
+	// 「カスケードはDBに任せる」3例目の実装）。
+	@Transactional
+	public void deleteLabel(Integer boardId, Integer labelId) {
+		if (!labelRepository.existsByBoardIdAndId(boardId, labelId)) {
+			throw new ResourceNotFoundException(
+					"ラベルが見つかりません（boardId=" + boardId + ", id=" + labelId + "）");
+		}
+		labelRepository.deleteById(labelId);
+	}
+
 	// エンティティをDTOへ変換する処理。DBアクセスを伴わない単純な詰め替えだが、
 	// 「エンティティをController・APIレスポンスへ漏らさない」という責務をService層に閉じ込めておく。
 	private static BoardResponse toResponse(Board board) {
