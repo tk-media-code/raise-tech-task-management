@@ -166,7 +166,7 @@
 
 ## 13. React Routerの基本
 
-`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点も扱います。
+`BrowserRouter`・`Routes`・`Route`・`Link`・`useParams`・`useNavigate`という、React Routerの基本的な構成要素を解説します。`element`にはただのJSXを渡しているだけなので、他のコンポーネント同様にpropsを渡せる点や、どのURLにも一致しなかったときの受け皿になる`path="*"`（書く位置が意味を持つ唯一の`Route`）も扱います。
 
 📄 詳細：[05-router.md](./05-router.md#13-react-routerの基本)
 
