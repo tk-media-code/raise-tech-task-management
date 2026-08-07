@@ -4,14 +4,15 @@ import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
 import CardDragPreview from '../components/CardDragPreview'
+import MobileStatusTabs from '../components/MobileStatusTabs'
 import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
 import { useApi } from '../hooks/useApi'
 import { cardCollisionDetection, columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
-import { groupCardsByStatusAndBoard } from '../lib/grouping'
+import { countCardsInGroups, groupCardsByStatusAndBoard } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
-import type { BoardResponse, CardResponse } from '../types/api'
+import type { BoardResponse, CardResponse, CardStatus } from '../types/api'
 
 type Props = {
   /**
@@ -62,6 +63,14 @@ function CrossBoardView({ boards }: Props) {
   // （カードのクリック）がこのページの中でしか起きないため。
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
 
+  // スマートフォン幅（768px未満）で表示中のタブ。pages/BoardDetailView.tsxと違い、
+  // この画面はルートが"/"の1つだけで動的パラメータを持たないため、他の画面へ移動して
+  // 戻ってくるたびにReact Router自身がこのコンポーネントをアンマウント→再マウントする
+  // （App.tsxの<Routes>直下、動的セグメントの無い唯一のRoute）。マウントのたびに
+  // useStateの初期値からやり直されるため、pages/BoardDetailView.tsxのような
+  // boardId変更を監視するuseEffectでのリセットは不要。
+  const [mobileActiveStatus, setMobileActiveStatus] = useState<CardStatus>('todo')
+
   /**
    * 画面の中身（3列 or 状態メッセージ）を組み立てる。
    * ネストした三項演算子ではなく「上から順に早期returnする」形にすると、
@@ -97,6 +106,15 @@ function CrossBoardView({ boards }: Props) {
         onDragEnd={dragAndDrop.handleDragEnd}
         onDragCancel={dragAndDrop.handleDragCancel}
       >
+        <MobileStatusTabs
+          activeStatus={mobileActiveStatus}
+          countsByStatus={{
+            todo: countCardsInGroups(grouped.todo),
+            doing: countCardsInGroups(grouped.doing),
+            done: countCardsInGroups(grouped.done),
+          }}
+          onSelect={setMobileActiveStatus}
+        />
         <div className="grid gap-4 md:grid-cols-3">
           {STATUSES.map((status) => {
             const boardGroups = grouped[status]
@@ -104,8 +122,10 @@ function CrossBoardView({ boards }: Props) {
               <StatusColumn
                 key={status}
                 title={STATUS_LABELS[status]}
-                // 列見出しの件数は「ボードごとの件数の合計」。reduceで1つずつ足し込む。
-                count={boardGroups.reduce((sum, group) => sum + group.cards.length, 0)}
+                // 列見出しの件数は「ボードごとの件数の合計」。MobileStatusTabsのタブ用件数と
+                // 同じ計算をlib/grouping.tsのcountCardsInGroupsへ集約している。
+                count={countCardsInGroups(boardGroups)}
+                isActiveOnMobile={status === mobileActiveStatus}
               >
                 {boardGroups.length === 0 ? (
                   // カードが0件なのではなく、ボード自体が1つも無い状態

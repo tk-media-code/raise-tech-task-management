@@ -147,4 +147,54 @@ className="m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto border-0 bg-tr
 
 ---
 
+## 36. ARIAタブパターンによるモバイル向けステータス切り替え
+
+スマートフォン幅（768px未満）では、「未着手／作業中／完了」の3列カンバンを横に並べる余白が無いため、`components/MobileStatusTabs.tsx`が画面上部にタブボタンを表示し、選択中の1列だけを`components/StatusColumn.tsx`（`isActiveOnMobile`プロパティ）が表示する、という要件8.1向けのUIを追加しました。ここで使った`role="tablist"`/`role="tab"`/`aria-selected`は、本プロジェクトで初めて登場するARIAの複合ウィジェットパターンです。
+
+```typescript
+<div className="mb-4 flex gap-1.5 md:hidden" role="tablist" aria-label="ステータス切り替え">
+  {STATUSES.map((status) => (
+    <button
+      key={status}
+      type="button"
+      role="tab"
+      aria-selected={status === activeStatus}
+      onClick={() => onSelect(status)}
+    >
+      {STATUS_LABELS[status]} ({countsByStatus[status]})
+    </button>
+  ))}
+</div>
+```
+
+### なぜ`aria-pressed`ではなく`role="tablist"`/`"tab"`なのか
+
+このコードベースには、選択状態を持つボタンの前例として[`LabelToggleChip.tsx`](../../frontend/src/components/LabelToggleChip.tsx)（検索画面のラベル絞り込み、カード作成フォームのラベル選択）がすでにあり、そちらは`aria-pressed`を使っています。今回同じ`aria-pressed`を使わなかったのは、2つのUIが表している「選択」の性質が違うためです。
+
+| | `LabelToggleChip`（`aria-pressed`） | `MobileStatusTabs`（`role="tab"` / `aria-selected`） |
+| --- | --- | --- |
+| 選択できる数 | 0個〜複数個（独立したON/OFF） | 常にちょうど1個（排他的） |
+| ボタン同士の関係 | 互いに無関係 | 「同じグループの中のどれか1つ」という関係がある |
+| 対応するARIAの概念 | トグルボタン（単体で完結） | タブ（`tablist`という親子関係を持つ複合ウィジェット） |
+
+`aria-pressed`はボタン1個だけで意味が完結する属性で、「他のボタンが何個押されているか」を考慮しません。一方`MobileStatusTabs`は「未着手・作業中・完了のうち今どれを見ているか」という、3つがひとまとまりで初めて意味を持つ状態を表しています。この「ひとまとまりの中の排他選択」という関係そのものを支援技術に伝えるのが`role="tablist"`（親：これは選択肢のグループだ）と`role="tab"`＋`aria-selected`（子：この選択肢が今選ばれているか）の役割です。
+
+### あえて実装しなかったもの：roving tabindexと矢印キー操作
+
+WAI-ARIAの定める本来のタブパターン（APGのTab Panelパターン）は、キーボード操作についてもう一段踏み込んだ作り込みを求めます。選択中のタブだけを通常のTab移動の対象にし（`tabindex="0"`）、それ以外は`tabindex="-1"`で通常のTab移動から外したうえで、フォーカスが当たっている状態で矢印キーを押すとタブ間でフォーカスと選択が同時に動く「roving tabindex」という仕組みです。
+
+`MobileStatusTabs`ではこれを実装していません。3つのボタンはどれも普通の`<button>`のままなので、Tabキーで1つずつフォーカスでき、Enter/Spaceキーでクリックと同じ選択操作ができます。キーボードだけで操作できるという要件そのものは、roving tabindexが無くても満たされています。[`LabelToggleChip.tsx`](../../frontend/src/components/LabelToggleChip.tsx)も同様に矢印キー操作までは実装しておらず、本プロジェクトは複合ウィジェットのフルスペック実装よりも「素朴な`<button>`の集まりとして、必要十分なキーボード操作性を確保する」という簡略化を一貫して選んでいます。
+
+### あえて付けなかった`role="tabpanel"`
+
+本来のタブパターンでは、`role="tab"`と対になる`role="tabpanel"`（今選ばれているタブに対応する中身）もセットで使います。今回、この`role`は`StatusColumn`には付けていません。
+
+理由は画面幅によって意味が変わってしまうためです。`role="tabpanel"`は「選択中のタブに対応するパネルが1つだけ表示されている」ことを前提にした役割ですが、`StatusColumn`は768px以上では3列とも同時に表示され続けます（[17章](./07-build-tooling.md#17-tailwind-cssの読み方)の`md:`修飾子の通り、`MobileStatusTabs`自体も`md:hidden`でこの幅では消えます）。768px未満でだけ真になる性質を、幅に関わらず常に付いているかのような`role`として書いてしまうと、PC幅で見ている支援技術のユーザーに対して実態と異なる情報を伝えることになります。「CSSで見た目上は1列に絞り込んでいても、ARIAのroleとしてそう言い切れるわけではない」場面もある、という一例です。
+
+### 結果
+
+`role="tablist"`/`"tab"`/`aria-selected`により、「未着手・作業中・完了という3択のうち、今どれを見ているか」という状態がスクリーンリーダー等の支援技術にも正しく伝わるようになりました。一方で、roving tabindexや`role="tabpanel"`まで含めたAPGパターンのフルスペック実装は行わず、既存の`LabelToggleChip.tsx`と同じ水準（ネイティブな`<button>`の持つキーボード操作性に乗る）に揃えています。どこまで作り込むかは、機能的に必要な水準と実装コストを見比べて決める判断であり、本プロジェクトでは一貫して「ブラウザ・HTMLが標準で持っている機能に乗れる部分は乗る」（[34章](#34-ネイティブdialogとモーダルのアクセシビリティ)のフォーカストラップと同じ考え方）を優先しています。
+
+---
+
 [← React学習ドキュメントトップへ戻る](./README.md)

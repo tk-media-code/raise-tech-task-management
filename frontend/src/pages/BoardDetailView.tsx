@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { apiPaths } from '../api/client'
 import CardCreateForm from '../components/CardCreateForm'
 import CardDetailModal from '../components/CardDetailModal'
 import CardDragPreview from '../components/CardDragPreview'
+import MobileStatusTabs from '../components/MobileStatusTabs'
 import SortableCardList from '../components/SortableCardList'
 import StatusColumn from '../components/StatusColumn'
 import StatusMessage from '../components/StatusMessage'
@@ -12,7 +13,7 @@ import { useApi } from '../hooks/useApi'
 import { cardCollisionDetection, columnId, useCardDragAndDrop } from '../hooks/useCardDragAndDrop'
 import { groupCardsByStatus } from '../lib/grouping'
 import { STATUSES, STATUS_LABELS } from '../lib/status'
-import type { CardResponse } from '../types/api'
+import type { CardResponse, CardStatus } from '../types/api'
 
 /**
  * ボード詳細画面（要件定義 docs/requirements/03-screens.md 6章の①）。
@@ -50,6 +51,20 @@ function BoardDetailView() {
 
   const [selectedCardId, setSelectedCardId] = useState<number | null>(null)
 
+  // スマートフォン幅（768px未満）で表示中のタブ。プロトタイプ（prototype/app.js の
+  // ui.mobileActiveStatus）と同じく初期値は'todo'。
+  const [mobileActiveStatus, setMobileActiveStatus] = useState<CardStatus>('todo')
+
+  // ボードを切り替える（＝boardIdが変わる）と、この画面はアンマウントされず再利用される
+  // （components/BoardSelect.tsxのnavigate(`/boards/${value}`)は、同じRouteパターン
+  // ("/boards/:boardId")内でのパラメータ変更にすぎないため。React Routerの標準挙動）。
+  // 何もしなければ「ボードAで『作業中』タブを見ていた」状態のままボードBへ切り替わって
+  // しまう。boardIdが変わるたびにタブを'todo'へ戻し、プロトタイプ（prototype/app.js:1408、
+  // ビュー切替時にui.mobileActiveStatus='todo'とする処理）と挙動を揃える。
+  useEffect(() => {
+    setMobileActiveStatus('todo')
+  }, [boardId])
+
   /**
    * 画面の中身（3列 or 状態メッセージ）を組み立てる。関数として呼ぶ理由は
    * CrossBoardView.tsxの同名関数のコメントを参照（コンポーネント化すると
@@ -81,11 +96,21 @@ function BoardDetailView() {
         onDragEnd={dragAndDrop.handleDragEnd}
         onDragCancel={dragAndDrop.handleDragCancel}
       >
+        <MobileStatusTabs
+          activeStatus={mobileActiveStatus}
+          countsByStatus={{ todo: grouped.todo.length, doing: grouped.doing.length, done: grouped.done.length }}
+          onSelect={setMobileActiveStatus}
+        />
         <div className="grid gap-4 md:grid-cols-3">
           {STATUSES.map((status) => {
             const statusCards = grouped[status]
             return (
-              <StatusColumn key={status} title={STATUS_LABELS[status]} count={statusCards.length}>
+              <StatusColumn
+                key={status}
+                title={STATUS_LABELS[status]}
+                count={statusCards.length}
+                isActiveOnMobile={status === mobileActiveStatus}
+              >
                 <SortableCardList
                   id={columnId(status, boardIdNumber)}
                   cards={statusCards}
