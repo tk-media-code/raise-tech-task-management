@@ -24,6 +24,24 @@ dev server はコンテナ内で動いており、ソースを編集すると HM
 | `src/api/` | APIのパス定義と `fetch` のラッパー |
 | `src/lib/` | ステータス・ラベル色・期日判定など、UIに依存しない小さなロジック |
 | `src/types/` | バックエンドのDTOに対応する型定義 |
+| `src/test/` | テストのセットアップ（マッチャーの追加・テストごとの後片付け） |
+
+## テスト
+
+[Vitest](https://vitest.dev) + [React Testing Library](https://testing-library.com/react) を使っています。テストは対象ファイルの隣に `*.test.ts` / `*.test.tsx` として置きます。
+
+```bash
+docker exec -w /workspace task-management-frontend npm test        # 1回だけ実行
+docker exec -w /workspace task-management-frontend npm run test:watch  # 変更を監視して再実行
+```
+
+`scripts/quality-check.sh` にも組み込まれているため、push前チェックで自動的に実行されます。
+
+Vitestを選んだのは、`vite.config.ts` の設定（React・Tailwindのプラグイン）をそのまま共有できるためです。テスト用の設定は同ファイルの `test` プロパティにまとめています（`environment: 'jsdom'`・`setupFiles`・`globals: false`）。
+
+**Vitestは型を検査しません。** esbuildで型注釈を落として実行するだけなので、型エラーは `npm run build`（`tsc -b`）でしか検出できません。`quality-check.sh` がビルドをテストより先に実行しているのはこのためです。
+
+設計判断の詳細は [docs/react/13-frontend-testing.md](../docs/react/13-frontend-testing.md) を参照してください。
 
 ## 静的解析
 

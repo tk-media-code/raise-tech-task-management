@@ -30,6 +30,7 @@
 | 31〜32章 | カードの完全削除 | [11-card-deletion.md](./11-card-deletion.md) |
 | 33章 | oxlintの設定強化 | [07-build-tooling.md](./07-build-tooling.md) |
 | 34章 | ネイティブ`<dialog>`とモーダルのアクセシビリティ | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
+| 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
 
 ## 目次
 
@@ -67,6 +68,7 @@
 32. [影響範囲の見極め——なぜ`dataVersion`が要らないのか](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
 33. [oxlintの設定強化](./07-build-tooling.md#33-oxlintの設定強化)
 34. [ネイティブ`<dialog>`とモーダルのアクセシビリティ](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
+35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 
 ---
 
@@ -339,6 +341,14 @@
 `<div>`で組み立てていた2つのモーダルを、HTMLの`<dialog>`要素へ置き換えました。`open`属性ではなく`showModal()`を呼ばなければフォーカストラップも`::backdrop`も効かないという最大の落とし穴、命令的なDOM APIを`useRef`＋`useEffect`から呼ぶ形、Escapeの`cancel`イベントを`preventDefault()`で止めてReactのstate経由で閉じる理由、Tailwindの`backdrop:`バリアント、そして背景クリック判定に`role="presentation"`が残る理由を扱います。
 
 📄 詳細：[12-dialog-accessibility.md](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
+
+---
+
+## 35. フロントエンドの自動テスト：壊れても気づけない場所を守る
+
+Vitest + React Testing Library を導入し、`useApi`・`useMutation`・`useDebouncedValue`・`CardCreateForm` に30件のテストを追加しました。Viteの設定を共有できるVitestの利点、`renderHook`によるフック単体の観察、偽のタイマーで時間を進める方法、モックの境界を`api/client`に置く判断、要素をクラス名ではなく「ユーザーに見える形」で探す理由を扱います。あわせて、**わざと実装を壊したところ`useDebouncedValue`のテストだけが不十分で通ってしまった**実例と、観察するタイミングを変えて修正した経緯も記録しています。
+
+📄 詳細：[13-frontend-testing.md](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 
 ---
 
