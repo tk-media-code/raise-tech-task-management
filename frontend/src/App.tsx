@@ -20,10 +20,11 @@ import type { BoardResponse } from './types/api'
  * 置いているのが要点。画面が切り替わってもアンマウントされないため、
  * ボード一覧のAPIをアプリ起動あたり1回叩くだけで済む。
  *
- * ボード一覧（GET /api/boards）はこのコンポーネントが取得し、BoardSelectと
- * BoardManageModalの両方へpropsで配る。以前はBoardSelectが自分でuseApiを呼んでいたが、
- * ボード管理モーダルでの新規作成をセレクトボックスへ反映させる必要が生まれたため、
- * 状態をここへ引き上げた（詳しい経緯はcomponents/BoardSelect.tsxのdocblock参照）。
+ * ボード一覧（GET /api/boards）はこのコンポーネントが取得し、BoardSelect・BoardManageModal・
+ * CrossBoardView・SearchView（配下のLabelFilterBarが使う）へpropsで配る。以前はBoardSelectが
+ * 自分でuseApiを呼んでいたが、ボード管理モーダルでの新規作成をセレクトボックスへ反映させる
+ * 必要が生まれたため、状態をここへ引き上げた（詳しい経緯はcomponents/BoardSelect.tsxの
+ * docblock参照）。この一覧を必要とするコンポーネントは、例外なくここから受け取る。
  *
  * ルート構成は要件定義（docs/requirements/03-screens.md 6章）の画面遷移に対応する。
  * これら4つに加え、どのpathにも一致しなかったURLを受け止める404ルート
@@ -128,7 +129,16 @@ function App() {
               値を渡せる（docs/react/05-router.md 13章参照）。 */}
           <Route path="/" element={<CrossBoardView boards={boards} />} />
           <Route path="/boards/:boardId" element={<BoardDetailView />} />
-          <Route path="/search" element={<SearchView />} />
+          {/* SearchView自身はboardsを使わない。配下のLabelFilterBar（ラベル絞り込みUI）へ
+              中継させるために渡している。以前はLabelFilterBarが独自にGET /api/boardsを
+              呼んでおり、上のdocblockに書いた「アプリ起動あたり1回」という方針を破る
+              唯一の箇所だった。 */}
+          <Route
+            path="/search"
+            element={
+              <SearchView boards={boards} boardsLoading={boardsLoading} boardsError={boardsError} />
+            }
+          />
           <Route path="/archive" element={<ArchiveView />} />
           {/* 上のどれにも一致しなかったURLの受け皿。path="*"は必ず最後に置く
               （<Routes>は一致した最初の1つだけを描画するため、先頭に書くと
