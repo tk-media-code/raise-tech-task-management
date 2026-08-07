@@ -52,26 +52,26 @@ erDiagram
 
 **BOARD（ボード）**
 
-| カラム     | 型       | 説明           |
-| ---------- | -------- | -------------- |
-| id         | int (PK) | ボードID       |
-| name       | string   | ボード名       |
-| position   | int      | 一覧での表示順 |
-| created_at | datetime | 作成日時       |
+| カラム     | 型       | 説明                   |
+| ---------- | -------- | ---------------------- |
+| id         | int (PK) | ボードID               |
+| name       | string   | ボード名（50文字以内） |
+| position   | int      | 一覧での表示順         |
+| created_at | datetime | 作成日時               |
 
 **CARD（カード）**
 
-| カラム                  | 型       | 説明                                                      |
-| ----------------------- | -------- | --------------------------------------------------------- |
-| id                      | int (PK) | カードID                                                  |
-| board_id                | int (FK) | 所属するボードのID                                        |
-| title                   | string   | タイトル（必須）                                          |
-| description             | text     | 説明・メモ（任意）                                        |
-| due_date                | date     | 期日（任意）                                              |
+| カラム                  | 型       | 説明                                                |
+| ----------------------- | -------- | --------------------------------------------------- |
+| id                      | int (PK) | カードID                                            |
+| board_id                | int (FK) | 所属するボードのID                                  |
+| title                   | string   | タイトル（必須、200文字以内）                       |
+| description             | text     | 説明・メモ（任意、2000文字以内）                    |
+| due_date                | date     | 期日（任意）                                        |
 | status                  | string   | `todo`（未着手）/ `doing`（作業中）/ `done`（完了） |
-| is_archived             | boolean  | アーカイブ済みかどうか                                    |
-| position                | int      | 同一ステータス内での表示順                                |
-| created_at / updated_at | datetime | 作成日時・更新日時                                        |
+| is_archived             | boolean  | アーカイブ済みかどうか                              |
+| position                | int      | 同一ステータス内での表示順                          |
+| created_at / updated_at | datetime | 作成日時・更新日時                                  |
 
 **LABEL（ラベル）**
 
@@ -79,7 +79,7 @@ erDiagram
 | -------- | -------- | -------------------------- |
 | id       | int (PK) | ラベルID                   |
 | board_id | int (FK) | 所属するボードのID         |
-| name     | string   | ラベル名                   |
+| name     | string   | ラベル名（30文字以内）     |
 | color    | string   | 色（既定パレットから選択） |
 
 **CARD_LABEL（カードとラベルの中間テーブル）**
