@@ -157,7 +157,7 @@ function CrossBoardView({ boards }: Props) {
 
   return (
     <section>
-      <h2 className="mb-4 text-lg font-semibold">横断ビュー</h2>
+      {/* 画面上部の「横断ビュー」見出しは、ヘッダーのボード選択で現在画面が分かるため置かない。 */}
       {renderContent()}
       {dragAndDrop.error !== null && (
         <StatusMessage kind="error">カードの移動に失敗しました：{dragAndDrop.error.message}</StatusMessage>
