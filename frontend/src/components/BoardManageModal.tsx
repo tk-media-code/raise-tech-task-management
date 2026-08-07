@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, SyntheticEvent } from 'react'
 import type { CollisionDetection, DragEndEvent } from '@dnd-kit/core'
 import { closestCenter, DndContext, useDroppable } from '@dnd-kit/core'
 import type { SortingStrategy } from '@dnd-kit/sortable'
@@ -81,35 +81,50 @@ function BoardManageModal({ open, boards, onChanged, onDeleted, onClose }: Props
 
   // モーダルを開いた直後にボード名入力欄へフォーカスを当てる（CardCreateForm.tsxと同じ理由）。
   const nameInputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => {
-    if (open) {
-      nameInputRef.current?.focus()
-    }
-  }, [open])
+  // <dialog>要素への参照。showModal()という命令的なDOM APIを呼ぶために必要
+  // （CardDetailModal.tsxと同じ作法）。
+  const dialogRef = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
     if (!open) return
+    const dialog = dialogRef.current
+    if (dialog === null) return
 
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return
-      // 改名編集中のEscapeは「モーダルを閉じる」ではなく「編集をキャンセルする」を優先する。
-      // SortableBoardRow側で個別にstopPropagationするのではなく、ここで一元的に分岐している
-      // 理由はrenamingBoardIdのコメント参照。
-      if (renamingBoardId !== null) {
-        setRenamingBoardId(null)
-      } else {
-        onClose()
-      }
-    }
+    // open属性をJSXに書くのではなくshowModal()を呼ぶ理由はCardDetailModal.tsx参照
+    // （フォーカストラップ・背景の不活性化・::backdropは、showModal()でのみ有効になる）。
+    dialog.showModal()
 
-    document.addEventListener('keydown', handleKeyDown)
+    // showModal()は「autofocus属性を持つ要素、無ければ最初のフォーカス可能な要素」へ
+    // 自動でフォーカスを当てる。このモーダルではヘッダーの×ボタンがそれに当たるため、
+    // 直後に入力欄へ移し直して従来の挙動（開いたらすぐ入力できる）を保つ。
+    nameInputRef.current?.focus()
+
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
+      dialog.close()
     }
-  }, [open, onClose, renamingBoardId])
+  }, [open])
 
   // 全hooks呼び出しの後に置く早期return（フックのルール。CardDetailModal.tsxと同じ理由）。
   if (!open) return null
+
+  /**
+   * Escapeキーによる「閉じる」要求（<dialog>のcancelイベント）を受け取る。
+   *
+   * 以前はdocumentにkeydownリスナーを登録して自前でEscapeを拾っていたが、showModal()で
+   * 開いた<dialog>はブラウザ自身がEscapeを処理するため不要になった。ただしブラウザ既定の
+   * 動作は「DOM上でdialogを閉じる」だけなので、preventDefault()で止めたうえで、
+   * 従来と同じ分岐（改名編集中なら編集キャンセルを優先）をこちらで行う。
+   * SortableBoardRow側で個別にstopPropagationするのではなく、ここで一元的に分岐している
+   * 理由はrenamingBoardIdのコメント参照。
+   */
+  function handleCancel(event: SyntheticEvent<HTMLDialogElement>) {
+    event.preventDefault()
+    if (renamingBoardId !== null) {
+      setRenamingBoardId(null)
+    } else {
+      onClose()
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -128,95 +143,102 @@ function BoardManageModal({ open, boards, onChanged, onDeleted, onClose }: Props
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 sm:p-8"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+    <dialog
+      ref={dialogRef}
+      // Escapeキーはブラウザがcancelイベントとして届けてくれる（handleCancel参照）。
+      onCancel={handleCancel}
+      // role="dialog" / aria-modal="true" はshowModal()が暗黙に与えるため書かない。
+      aria-label="ボード管理"
+      className="m-0 h-dvh max-h-none w-full max-w-none overflow-y-auto border-0 bg-transparent p-0 backdrop:bg-slate-900/50"
     >
+      {/* 背景クリックで閉じるための領域。role="presentation"を含め、考え方はすべて
+          CardDetailModal.tsxと同じ（そちらのコメント参照）。 */}
       <div
-        className="w-full max-w-md rounded-lg bg-white shadow-xl"
-        role="dialog"
-        aria-modal="true"
-        aria-label="ボード管理"
+        role="presentation"
+        className="flex min-h-full items-start justify-center p-4 sm:p-8"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) onClose()
+        }}
       >
-        <header className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
-          <h2 className="text-base font-bold">ボード管理</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="閉じる"
-            className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
-          >
-            ×
-          </button>
-        </header>
-
-        <div className="space-y-3 p-4 text-sm">
-          <DndContext
-            sensors={dragAndDrop.sensors}
-            collisionDetection={boardCollisionDetection}
-            onDragMove={dragAndDrop.handleDragMove}
-            onDragEnd={handleDragEnd}
-            onDragCancel={dragAndDrop.handleDragCancel}
-          >
-            <ul
-              ref={setListNodeRef}
-              className={`space-y-2 rounded-lg ${showEndIndicator ? 'outline-2 -outline-offset-2 outline-dashed outline-blue-500' : ''}`}
-            >
-              <SortableContext items={dragAndDrop.boards.map((board) => board.id)} strategy={noSorting}>
-                {dragAndDrop.boards.length === 0 && (
-                  <li className="rounded border border-dashed border-slate-300 px-3 py-2 text-slate-400">
-                    ボードがありません。下のフォームから追加してください。
-                  </li>
-                )}
-                {dragAndDrop.boards.map((board, index) => (
-                  <SortableBoardRow
-                    key={board.id}
-                    board={board}
-                    isFirst={index === 0}
-                    isLast={index === dragAndDrop.boards.length - 1}
-                    isRenaming={renamingBoardId === board.id}
-                    onStartRename={setRenamingBoardId}
-                    onEndRename={() => setRenamingBoardId(null)}
-                    onChanged={onChanged}
-                    onDeleted={onDeleted}
-                    onMove={dragAndDrop.moveBoard}
-                    showDropLine={dragAndDrop.dropIndicator?.beforeBoardId === board.id}
-                  />
-                ))}
-              </SortableContext>
-            </ul>
-          </DndContext>
-          {dragAndDrop.error !== null && (
-            <StatusMessage kind="error">ボードの並べ替えに失敗しました：{dragAndDrop.error.message}</StatusMessage>
-          )}
-
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <input
-              ref={nameInputRef}
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="新しいボード名"
-              aria-label="新しいボード名"
-              maxLength={50}
-              className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
-            />
+        <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+          <header className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
+            <h2 className="text-base font-bold">ボード管理</h2>
             <button
-              type="submit"
-              disabled={name.trim() === '' || submitting}
-              title={name.trim() === '' ? 'ボード名を入力してください' : undefined}
-              className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+              type="button"
+              onClick={onClose}
+              aria-label="閉じる"
+              className="rounded px-2 text-lg leading-none text-slate-500 hover:bg-slate-100"
             >
-              ＋ 追加
+              ×
             </button>
-          </form>
+          </header>
 
-          {error !== null && <StatusMessage kind="error">{error.message}</StatusMessage>}
+          <div className="space-y-3 p-4 text-sm">
+            <DndContext
+              sensors={dragAndDrop.sensors}
+              collisionDetection={boardCollisionDetection}
+              onDragMove={dragAndDrop.handleDragMove}
+              onDragEnd={handleDragEnd}
+              onDragCancel={dragAndDrop.handleDragCancel}
+            >
+              <ul
+                ref={setListNodeRef}
+                className={`space-y-2 rounded-lg ${showEndIndicator ? 'outline-2 -outline-offset-2 outline-dashed outline-blue-500' : ''}`}
+              >
+                <SortableContext items={dragAndDrop.boards.map((board) => board.id)} strategy={noSorting}>
+                  {dragAndDrop.boards.length === 0 && (
+                    <li className="rounded border border-dashed border-slate-300 px-3 py-2 text-slate-400">
+                      ボードがありません。下のフォームから追加してください。
+                    </li>
+                  )}
+                  {dragAndDrop.boards.map((board, index) => (
+                    <SortableBoardRow
+                      key={board.id}
+                      board={board}
+                      isFirst={index === 0}
+                      isLast={index === dragAndDrop.boards.length - 1}
+                      isRenaming={renamingBoardId === board.id}
+                      onStartRename={setRenamingBoardId}
+                      onEndRename={() => setRenamingBoardId(null)}
+                      onChanged={onChanged}
+                      onDeleted={onDeleted}
+                      onMove={dragAndDrop.moveBoard}
+                      showDropLine={dragAndDrop.dropIndicator?.beforeBoardId === board.id}
+                    />
+                  ))}
+                </SortableContext>
+              </ul>
+            </DndContext>
+            {dragAndDrop.error !== null && (
+              <StatusMessage kind="error">ボードの並べ替えに失敗しました：{dragAndDrop.error.message}</StatusMessage>
+            )}
+
+            <form onSubmit={handleSubmit} className="flex gap-2">
+              <input
+                ref={nameInputRef}
+                type="text"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="新しいボード名"
+                aria-label="新しいボード名"
+                maxLength={50}
+                className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button
+                type="submit"
+                disabled={name.trim() === '' || submitting}
+                title={name.trim() === '' ? 'ボード名を入力してください' : undefined}
+                className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+              >
+                ＋ 追加
+              </button>
+            </form>
+
+            {error !== null && <StatusMessage kind="error">{error.message}</StatusMessage>}
+          </div>
         </div>
       </div>
-    </div>
+    </dialog>
   )
 }
 
