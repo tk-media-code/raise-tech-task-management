@@ -1,11 +1,15 @@
-import { apiPaths } from '../api/client'
-import { useApi } from '../hooks/useApi'
 import { useLabelsByBoard } from '../hooks/useLabelsByBoard'
 import type { BoardResponse } from '../types/api'
 import LabelToggleChip from './LabelToggleChip'
 import StatusMessage from './StatusMessage'
 
 type Props = {
+  /** ボード一覧。App.tsxが取得したものをSearchView経由で受け取る（未取得・取得失敗はnull） */
+  boards: BoardResponse[] | null
+  /** ボード一覧の取得中かどうか */
+  boardsLoading: boolean
+  /** ボード一覧の取得に失敗した場合のエラー */
+  boardsError: Error | null
   /** 現在絞り込みに使われているラベルIDの一覧 */
   selectedLabelIds: number[]
   /** チップがクリックされたとき（選択⇔解除のトグル）に呼ばれる */
@@ -16,16 +20,25 @@ type Props = {
  * 検索画面（要件5.8）のラベル絞り込みUI。
  * ラベルはボード単位で管理されているため、絞り込み候補もボードごとにグループ化して表示する。
  *
- * ボード一覧はこのコンポーネント自身が取得する（components/BoardSelect.tsxも同じ
- * GET /api/boardsを独立して呼んでいる）。このプロジェクトはまだコンポーネント間で
- * データを共有する仕組み（Contextなど）を持っておらず、「必要なコンポーネントが
- * それぞれ自分で取りに行く」という既存方針をここでも踏襲している
- * （3ボード程度の小さな一覧を1回多く取得するコストは無視できる）。
+ * ボード一覧は自分では取得せず、App.tsx → SearchView とpropsでリレーされたものを使う。
+ * 以前はこのコンポーネントが独自にuseApi(apiPaths.boards())を呼んでおり、App.tsxのdocblockが
+ * 明記する「ボード一覧のAPIをアプリ起動あたり1回叩くだけで済む」という設計を破る唯一の箇所に
+ * なっていた（BoardSelect・BoardManageModal・CrossBoardViewはいずれもApp.tsxから受け取る形に
+ * 揃っている）。検索画面を開くたびに2回目のGET /api/boardsが飛んでいたのを、他と同じ
+ * リレー方式へ統一した。
+ *
+ * 一方、ラベル一覧（ボードごとのGET /api/boards/{id}/labels）は引き続きこのコンポーネントが
+ * useLabelsByBoardで取得する。ラベルの一覧を必要とするのは今のところこの画面だけであり、
+ * App.tsxまで引き上げる理由が無いため（必要とする画面が2つ目に増えた時点で、ボード一覧が
+ * たどったのと同じリフトアップを検討すればよい）。
  */
-function LabelFilterBar({ selectedLabelIds, onToggle }: Props) {
-  const { data: boards, loading: boardsLoading, error: boardsError } = useApi<BoardResponse[]>(
-    apiPaths.boards(),
-  )
+function LabelFilterBar({
+  boards,
+  boardsLoading,
+  boardsError,
+  selectedLabelIds,
+  onToggle,
+}: Props) {
   const { labelsByBoard, loading: labelsLoading, error: labelsError } = useLabelsByBoard(boards)
 
   if (boardsLoading || labelsLoading) {
