@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugsの検出結果から、意図的に除外するバグパターンを定義するファイル。
+
+  EI_EXPOSE_REP / EI_EXPOSE_REP2（「内部表現の露出」）を除外している。これらは
+  「getterがミュータブルなフィールド（配列・Listなど）をそのまま返す」「コンストラクタ/setterが
+  受け取った引数をそのままフィールドへ格納する」ことを指摘するルールで、呼び出し元が
+  そのオブジェクトを後から書き換えると、エンティティ/DTO側の値まで意図せず変わってしまう
+  （＝カプセル化が破れる）ことへの警告。
+
+  本プロジェクトでは実測でこの指摘が21件出たが、その全てが次の2パターンのいずれかであり、
+  防御的コピーを足すことは設計をむしろ複雑にする：
+    1. JPAエンティティの@ManyToOne関連（例: Card.getBoard/setBoard）。
+       関連エンティティはHibernateが永続化コンテキストで管理する前提のオブジェクトであり、
+       防御的コピーを挟むと同一性比較や変更検知（ダーティチェック）が意図通り働かなくなる。
+    2. DTOのrecord（例: CardCreateRequest.labelIds、CardResponse.labels）。
+       recordはコンストラクタ引数をそのままフィールドにするのが標準的な使い方で、
+       Bean ValidationやJacksonのシリアライズ/デシリアライズもこの前提で動く。
+  除外せずに残すと、実際のバグ（NullPointerやリソースリークなど）の指摘が21件のノイズに
+  埋もれてしまうため、SpotBugs導入の目的（実質的なバグ検出）に立ち返り、ここで除外する。
+-->
+<FindBugsFilter>
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP" />
+	</Match>
+	<Match>
+		<Bug pattern="EI_EXPOSE_REP2" />
+	</Match>
+</FindBugsFilter>

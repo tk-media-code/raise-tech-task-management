@@ -17,8 +17,17 @@
 1. **開発に着手する前に、必ずIssueを立てる。** ユーザーから実装依頼を受けたら、着手前にIssueがあるか確認し、なければ先に `gh issue create` で作成する
 2. **Issue番号を含むブランチを作成する。** 形式は `feature/<issue番号>-<内容>`。`main` を最新化してから切る。このとき、前回までにマージ済みで不要になったローカルブランチ（`git branch --merged main` で確認できるもの。`main` 自身は除く）があれば削除する
 3. **`main` へ直接コミット・push しない。** GitHub側で保護されており拒否される。変更は必ずPR経由
-4. **コミット → push → PR作成まで行う。** PR本文に `Closes #<issue番号>` を必ず含める
-5. **PR作成後、`gh pr merge` は実行せず、そこで止まる。** マージはユーザーが内容を確認した上で行う。マージ方式はマージコミット固定（Squash・Rebase不可、GitHub側で強制済み）。マージされるとIssueは自動closeされ、リモートブランチも自動削除される
+4. **push する前に必ず品質チェックを実行する。** `bash scripts/quality-check.sh` を実行し、指摘が0件であることを確認してから push する。指摘があれば修正 → 再コミット → 再チェックを、指摘が解消するまで自分で繰り返す。**ユーザーが明示的に許可しない限り、指摘を残したまま push しない。** この規約は `.claude/hooks/pre-push-quality-check.sh`（PreToolUse フック）で機械的に強制されており、チェックに失敗すると `git push` を含む Bash コマンドがブロックされる。ブロックを回避する `SKIP_QUALITY_CHECK=1` を、ユーザーの明示的な指示なしに付けてはならない
+5. **コミット → push → PR作成まで行う。** PR本文に `Closes #<issue番号>` を必ず含める
+6. **PR作成後、`gh pr merge` は実行せず、そこで止まる。** マージはユーザーが内容を確認した上で行う。マージ方式はマージコミット固定（Squash・Rebase不可、GitHub側で強制済み）。マージされるとIssueは自動closeされ、リモートブランチも自動削除される
+
+## 品質チェックとフック
+
+- **`scripts/quality-check.sh` が実処理の唯一の正。** backend（Checkstyle・SpotBugs・既存テスト）・frontend（oxlint・型チェック・ビルド）のチェック内容はこのスクリプト1本に集約している。個別のコマンドを直接叩くのではなく、必ずこれを呼ぶ
+- **CIは「ビルドが通ること」しか見ない。** 静的解析・テストの実行はCIに含まれていないため、push前のこのチェックが唯一の検出機会になる（詳しい経緯は[CONTRIBUTING.md 5章](./CONTRIBUTING.md#5-push前の品質チェック)参照）
+- **`.claude/settings.json` を変更したら、Claude Codeの再起動が必要。** hooksはセッション開始時にのみ読み込まれ、動的な変更は反映されない
+- 手動で品質チェックしたい場合は `/quality-check` スキルを使う
+- backend関連のコマンドは、必ず `docker exec -w /workspace task-management-backend <cmd>` の形でコンテナ内実行する（ホストのJavaは11系で、backendが要求するJava 25 toolchainを満たさないため）
 
 ## コーディング規約（コメント）
 

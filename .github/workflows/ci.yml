@@ -1,0 +1,73 @@
+# PRの作成・更新のたびに、backend/frontendそれぞれのビルドが通ることだけを自動確認する
+# ワークフロー。静的解析（Checkstyle・SpotBugs・oxlint）と既存テストの実行は、
+# ここでは行わない。それらはpush前のローカルチェック（scripts/quality-check.sh、
+# Claude Code利用時は .claude/hooks/pre-push-quality-check.sh による機械的強制）が
+# 担当する（CONTRIBUTING.md 5章参照）。
+#
+# なぜCIとpush前チェックで役割を分けているか: CIはPRを作成・更新した「後」にしか
+# 走らず、問題に気づくタイミングとして遅い。品質上の問題（静的解析の指摘・テスト失敗）
+# はpush前に検出・修正すべきもので、CIの役割は「開発者のローカル環境固有の事情に
+# 依存せず、クリーンなマシンでビルドが通ること」を最終確認する二重の網に絞っている。
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend (compile + package)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      # Gradle本体のダウンロード・依存関係解決結果をGitHub Actions側でキャッシュし、
+      # 実行のたびに毎回フルダウンロードするのを防ぐ公式アクション。
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # assemble: compileJava・compileTestJava（本体・テストコードのコンパイル）を経て
+      # bootJarのパッケージングまで確認する。静的解析（checkstyleMain・spotbugsMain）や
+      # test（既存のcontextLoadsスモークテスト）が依存する check タスクは含まない
+      # （build = assemble + check だが、あえて assemble だけを使う）。
+      # testClasses（テストコードのコンパイルのみ、実行はしない）を加えているのは、
+      # 本体のリファクタリングでテストソースが構文的に壊れているのに、assembleだけでは
+      # 気づけずに緑のまま通過してしまう事故を防ぐため。テストの実行自体はしないので、
+      # 「静的解析・テストの実行はpush前チェックに任せる」という役割分担には反しない。
+      # application.properties の ${DB_URL} 等は実行時に解決されるプレースホルダであり、
+      # コンパイル・パッケージングの段階では未設定でも問題にならないため、
+      # 以前あったPostgreSQLサービスコンテナやDB系環境変数はもう必要ない。
+      - name: Compile and package
+        working-directory: backend
+        run: ./gradlew assemble testClasses --console=plain
+
+  frontend:
+    name: Frontend (type check + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # tsc -b（型チェック）を含むVite本番ビルド。型エラーがあればここで失敗する。
+      # oxlintによるLintはここでは行わない（push前チェックの担当）。
+      - name: Build
+        working-directory: frontend
+        run: npm run build

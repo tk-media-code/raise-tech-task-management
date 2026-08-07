@@ -3,3 +3,11 @@ __pycache__/
 
 # 環境変数（DB認証情報など）。雛形の .env.example だけをコミットする
 .env
+
+# Claude Codeの個人設定（permissions.allow等）。品質チェックの強制フックは
+# .claude/settings.json（追跡対象）に置いており、こちらは個人の好みに閉じる設定用。
+.claude/settings.local.json
+# Claude Codeがサブエージェントの隔離作業用に作るgit worktree。
+# scripts/quality-check.sh はworktree内からの実行を意図的に拒否する
+#（docker execがメインチェックアウト側のコードを検査してしまう事故を防ぐため）。
+.claude/worktrees/
