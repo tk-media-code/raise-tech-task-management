@@ -86,7 +86,8 @@ tasks.withType(com.github.spotbugs.snom.SpotBugsTask).configureEach {
 // 検査項目自体はconfig/checkstyle/checkstyle.xml（このファイル冒頭のコメント参照）で定義する。
 checkstyle {
 	toolVersion = '13.9.0'
-	// テストコードは対象外にする。今のところTaskManagementApplicationTests（空のスモークテスト）
-	// しか無く、検査から得られる価値が薄いため（テストが増えてきたら見直す）。
-	sourceSets = [sourceSets.main]
+	// テストコードも検査対象に含める。導入当初は空のスモークテスト1件しか無く価値が薄いとして
+	// 除外していたが、Service層・Controller層のテストが増えたため方針を戻した。テストコードも
+	// 「読んで意味が分かること」が重要な資産であり、本体と同じ規約で保つ。
+	sourceSets = [sourceSets.main, sourceSets.test]
 }
