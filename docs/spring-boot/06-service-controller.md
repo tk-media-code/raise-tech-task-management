@@ -448,4 +448,72 @@ GET /api/boards/999
 
 `spring.mvc.problemdetails.enabled=true`（[8章](./02-build-config.md#8-applicationproperties-の読み方)）を設定しているため、Spring MVCが自前で処理する例外（例えば`GET /api/boards/abc`のようにパス変数の型変換に失敗した場合の400 Bad Request）も、同じ`application/problem+json`形式で返ります。自前の例外（404）とフレームワーク起因の例外（400など）のレスポンス形式が統一されることで、クライアント側のエラー処理を1本化できます。
 
+### 想定外の例外を受け止めるフォールバック——「置き場所」が結果を変える
+
+ここまでのハンドラが対象にしているのは、アプリが**意図して投げた**例外（`ResourceNotFoundException`・`InvalidRequestException`）だけです。では、どれにも当てはまらない失敗——`NullPointerException`や、DB接続の断絶のような「本来起きるはずのないもの」——が起きたらどうなるでしょうか。
+
+素直に考えると、`GlobalExceptionHandler`に1つ足せば済みそうです。
+
+```java
+// これをGlobalExceptionHandlerに書いてはいけない
+@ExceptionHandler(Exception.class)
+public ProblemDetail handleUnexpectedError(Exception ex, HttpServletRequest request) { ... }
+```
+
+しかし`GlobalExceptionHandler`には`@Order(Ordered.HIGHEST_PRECEDENCE)`が付いています（[30章](./09-write-api-validation.md#30-バリデーションエラーを400で返す)で必要になった指定です）。**最初に評価される**位置にあるクラスへ「すべての例外」を受け取るハンドラを置くと、Spring MVC自身が投げるフレームワーク由来の例外まで軒並みこちらが捕まえてしまいます。
+
+- 存在しないURL → `NoResourceFoundException`（本来404）
+- 壊れたJSON → `HttpMessageNotReadableException`（本来400）
+- パス変数の型不一致 → `MethodArgumentTypeMismatchException`（本来400）
+
+これらが**すべて500になります**。前節で「自前の例外とフレームワーク起因の例外のレスポンス形式が統一される」と述べた仕組みが、まるごと壊れることになります。
+
+そこで、フォールバックは別のクラスに分け、優先順位を逆にします。
+
+```java
+@RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)   // ← 最後に評価される
+public class UnexpectedErrorHandler {
+
+	@ExceptionHandler(Exception.class)
+	public ProblemDetail handleUnexpectedError(Exception ex, HttpServletRequest request) {
+		LOG.error("想定外のエラーが発生しました（path={}）", request.getRequestURI(), ex);
+		ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+				HttpStatus.INTERNAL_SERVER_ERROR, "サーバー側で予期しないエラーが発生しました");
+		problem.setTitle("サーバーエラー");
+		problem.setInstance(URI.create(request.getRequestURI()));
+		return problem;
+	}
+}
+```
+
+フォールバックは「他のどれにも当てはまらなかったもの」を受ける役目です。だから優先順位は最も低くなければなりません。**ハンドラの選択は「例外の型」だけで決まるのではなく、`@ControllerAdvice`の評価順にも左右される**——これがクラスを分けた理由です。
+
+実際に分けた状態で確認すると、フレームワーク由来の例外は元の通りに振る舞います。
+
+| リクエスト | ステータス | `title` |
+| --- | --- | --- |
+| 存在しないURL | 404 | `Not Found` |
+| 存在しないカードID | 404 | `リソースが見つかりません`（自前） |
+| `/api/cards/abc`（型不一致） | 400 | `Bad Request` |
+| 壊れたJSON | 400 | `Bad Request` |
+| タイトル空欄 | 400 | `バリデーションエラー`（自前） |
+| `DELETE /api/cards` | 405 | `Method Not Allowed` |
+
+#### 500では原因を返さない
+
+もう1つ、他のハンドラと意図的に違えている点があります。500のレスポンスに`ex.getMessage()`を載せていないことです。
+
+```java
+// 他のハンドラ：例外メッセージをそのまま返す
+ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+
+// フォールバック：固定の文言だけを返す
+ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "サーバー側で予期しないエラーが発生しました");
+```
+
+この差は「そのメッセージを誰が書いたか」に由来します。`ResourceNotFoundException`のメッセージは、アプリが利用者に見せるつもりで書いた文言です。一方、想定外の例外のメッセージは、フレームワークやJDBCドライバが開発者向けに書いたもので、`relation "card" does not exist` のようにテーブル名やSQLの断片を含むことがあります。そのまま返せば、内部構造の手がかりを外部へ渡すことになります。
+
+**詳細はサーバーのログにだけ残し、クライアントには「失敗した」という事実だけを伝える**——これが500の扱い方の基本です。
+
 📄 N+1問題との関係は [24章](./07-jpa-performance.md#24-n1問題とその回避) 、`open-in-view`との関係は [25章](./07-jpa-performance.md#25-open-in-viewと遅延読み込みの境界) を参照してください。カード・ボード新規作成のバリデーションエラー（400）をこの仕組みにどう追加したか、そして「同じ`spring.mvc.problemdetails.enabled=true`が生む、もう1つの`@ControllerAdvice`との優先順位の落とし穴」は[30章](./09-write-api-validation.md#30-バリデーションエラーを400で返す)で詳しく扱います。
