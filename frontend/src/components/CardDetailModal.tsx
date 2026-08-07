@@ -311,7 +311,10 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                   // 他の項目と同じく下書きstateに紐づける（このコンポーネントのdocblock参照）。
                   value={status}
                   onChange={handleStatusChange}
-                  disabled={submitting}
+                  // アーカイブ済みのカードはバックエンド（CardService.updateStatus）が400で弾く。
+                  // 選べてしまってから保存時にエラーを見せるのではなく、操作自体を塞いで
+                  // 下のヒント文で理由を伝える（アーカイブ画面からもこのモーダルは開ける）。
+                  disabled={submitting || card.isArchived}
                   className="mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100"
                 >
                   {/* mapの引数名をstatusにすると、上で定義した下書きstate変数のstatusを
@@ -331,6 +334,13 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                     この程度でuseMutationへリセット手段を足すことはしない。 */}
                 {statusError !== null && (
                   <StatusMessage kind="error">{statusError.message}</StatusMessage>
+                )}
+                {/* <select>をdisabledにしただけでは「なぜ選べないのか」が分からないため、
+                    復元すれば変更できることまで書き添える（要件定義5.7の復元導線への案内）。 */}
+                {card.isArchived && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    アーカイブ済みのカードはステータスを変更できません。復元すると変更できます。
+                  </p>
                 )}
               </div>
 

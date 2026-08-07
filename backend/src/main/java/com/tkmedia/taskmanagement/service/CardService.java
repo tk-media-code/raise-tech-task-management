@@ -281,7 +281,8 @@ public class CardService {
 	 * @param request 変更後のステータスと、移動先列内での挿入位置（省略時は列の末尾）
 	 * @return 更新後のカードのDTO
 	 * @throws ResourceNotFoundException 該当カードが存在しない場合
-	 * @throws InvalidRequestException   statusが"todo"/"doing"/"done"のいずれでもない場合
+	 * @throws InvalidRequestException   statusが"todo"/"doing"/"done"のいずれでもない場合、
+	 *                                   または対象カードがアーカイブ済みの場合
 	 */
 	@Transactional
 	public CardResponse updateStatus(Integer id, CardStatusUpdateRequest request) {
@@ -289,7 +290,18 @@ public class CardService {
 		Card card = cardRepository.findByIdWithBoard(id)
 				.orElseThrow(() -> new ResourceNotFoundException("カードが見つかりません（id=" + id + "）"));
 
-		// --- 2. ステータス値の検証 ---
+		// --- 2. 操作の可否を状態で判定する ---
+		// アーカイブ済みのカードはボード上に表示されないため、ステータスを変更する導線も画面には無い。
+		// しかしAPIを直接叩けば通ってしまい、要件定義5.7「復元すると元のステータス列に戻る」の前提が
+		// 崩れる（doneでアーカイブしたカードをtodoに変えてから復元すると、「アーカイブしたはずなのに
+		// 未着手で戻ってくる」という不整合になる）。updateArchived（完了のみアーカイブ可）・
+		// delete（アーカイブ済みのみ削除可）と同じく、Bean Validationでは表現できない
+		// 「カードの現在の状態に依存する制約」はここで弾く。
+		if (card.getIsArchived()) {
+			throw new InvalidRequestException("アーカイブ済みのカードのステータスは変更できません");
+		}
+
+		// --- 3. ステータス値の検証 ---
 		// @NotBlankは「空文字でないこと」しか保証しないため、3値のいずれかであることはここで確認する
 		// （CardCreateRequestのラベルIDと同じ「業務ルールの検証はService層」という方針）。
 		String newStatus = request.status();
@@ -297,7 +309,7 @@ public class CardService {
 			throw new InvalidRequestException("ステータスは todo / doing / done のいずれかで指定してください");
 		}
 
-		// --- 3. 移動先列（同じボード・新ステータス）の現在の並びを取得 ---
+		// --- 4. 移動先列（同じボード・新ステータス）の現在の並びを取得 ---
 		Integer boardId = card.getBoard().getId();
 		List<Card> destinationColumn =
 				cardRepository.findByBoardIdAndStatusAndIsArchivedFalseOrderByPositionAscIdAsc(boardId, newStatus);
@@ -309,7 +321,7 @@ public class CardService {
 		// removeIfは何もしない no-op になる）。
 		destinationColumn.removeIf(c -> c.getId().equals(card.getId()));
 
-		// --- 4. 挿入位置を決める ---
+		// --- 5. 挿入位置を決める ---
 		// positionが未指定（null）なら列の末尾（＝現在の件数と同じインデックス）に挿入する。
 		// 指定されている場合も、リストのサイズを超える値はサイズにクランプする。ドラッグ＆ドロップで
 		// 列の最後尾へドロップしたとき、フロントエンドは「その時点の件数」をpositionとして送ってくる
@@ -319,7 +331,7 @@ public class CardService {
 				: Math.min(request.position(), destinationColumn.size());
 		destinationColumn.add(insertIndex, card);
 
-		// --- 5. 移動先列全体のpositionを1から振り直す ---
+		// --- 6. 移動先列全体のpositionを1から振り直す ---
 		// 「対象カードのpositionだけを挿入先の値に書き換える」方式では、同じ列の他のカードと
 		// position値が重複してしまう。ここでは移動先列に並ぶカード全員（対象カードを含む）を
 		// 正しい順序で並べたうえで、1から連番を振り直すことで重複のない一意な順序を保証する。
@@ -338,7 +350,7 @@ public class CardService {
 		// 「昇順に並べたときの順序」自体は保たれる（例：1, 2, 4 という並びでも順序は崩れない）。
 		// 次にその列で並べ替えが発生すれば、このメソッドが列全体を振り直すため、欠番は自然に解消される。
 
-		// --- 6. レスポンスDTOへの変換 ---
+		// --- 7. レスポンスDTOへの変換 ---
 		return toResponses(List.of(card)).get(0);
 	}
 
