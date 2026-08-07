@@ -65,7 +65,7 @@ function ArchiveView({ boardListPath }: Props) {
 
   return (
     <section>
-      <SubpageHeader title="アーカイブ" onBack={() => navigate(boardListPath)} />
+      <SubpageHeader onBack={() => navigate(boardListPath)} />
 
       {renderContent()}
 

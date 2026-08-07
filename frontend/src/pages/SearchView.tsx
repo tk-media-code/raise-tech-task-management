@@ -179,7 +179,7 @@ function SearchView({ boards, boardsLoading, boardsError, boardListPath }: Props
 
   return (
     <section>
-      <SubpageHeader title="タスク検索" onBack={() => navigate(boardListPath)} />
+      <SubpageHeader onBack={() => navigate(boardListPath)} />
 
       <input
         type="text"
