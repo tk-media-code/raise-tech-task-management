@@ -115,7 +115,9 @@ function App() {
             error={boardsError}
             selectedBoardId={selectedBoardId}
           />
-          <div className="flex flex-wrap items-center gap-2">
+          {/* スマートフォン幅（縦2行）では操作群を右揃え。md以上は親の justify-between で
+              右側に寄るため、ここでも右詰めのままで見た目は変わらない。 */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {/* ボード管理（要件6.2②）。新規作成・改名・削除・並べ替えのすべてを
                 components/BoardManageModal.tsxの中で行う。
                 アイコンだけだと役割が伝わりにくいので、ラベル文言をそのままボタン表示にする。
