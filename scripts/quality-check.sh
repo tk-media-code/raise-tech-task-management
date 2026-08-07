@@ -184,8 +184,14 @@ if [ "$TARGET" = "all" ] || [ "$TARGET" = "frontend" ]; then
 		run_check "frontend (oxlint)" \
 			"docker exec -w /workspace '$FRONTEND_CONTAINER' npx oxlint ${OXLINT_ARGS[*]}"
 		# npm run build は tsc -b（型チェック）と vite build の両方を行う。
+		# テストより先に実行するのは、Vitestが型を検査しない（esbuildで型注釈を落として
+		# 実行する）ため。型エラーはこちらでしか検出できず、先に走らせた方が原因に早く辿り着ける。
 		run_check "frontend (npm run build)" \
 			"docker exec -w /workspace '$FRONTEND_CONTAINER' npm run build"
+		# npm test は vitest run（1回だけ実行して終了するモード）。
+		# backendの gradlew check がテストまで含むのと対をなす位置づけ。
+		run_check "frontend (npm test)" \
+			"docker exec -w /workspace '$FRONTEND_CONTAINER' npm test"
 	else
 		HAS_ENV_ERROR=1
 	fi

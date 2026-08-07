@@ -29,6 +29,7 @@
 | 29〜30章 | ボード管理（改名・削除） | [10-board-management.md](./10-board-management.md) |
 | 31〜32章 | カードの完全削除 | [11-card-deletion.md](./11-card-deletion.md) |
 | 33章 | oxlintの設定強化 | [07-build-tooling.md](./07-build-tooling.md) |
+| 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
 
 ## 目次
 
@@ -65,6 +66,7 @@
 31. [2つ目の削除機能——`useDelete`と`window.confirm`の再利用](./11-card-deletion.md#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)
 32. [影響範囲の見極め——なぜ`dataVersion`が要らないのか](./11-card-deletion.md#32-影響範囲の見極めなぜdataversionが要らないのか)
 33. [oxlintの設定強化](./07-build-tooling.md#33-oxlintの設定強化)
+35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 
 ---
 
@@ -329,6 +331,14 @@
 品質チェックを機に、2ルールしか有効にしていなかった`.oxlintrc.json`を見直しました。`categories`によるカテゴリ単位の有効化、`jsx-a11y`・`promise`・`import`プラグインの追加、そして機械的に追加しただけでは生じる誤検知（`react/react-in-jsx-scope`・`import/no-unassigned-import`）をどう見極めて除外したかを解説します。`react/exhaustive-deps`が設定ファイル経由でも有効化できないことを実機で確認した結果や、実際に検出された8件の指摘も扱います。
 
 📄 詳細：[07-build-tooling.md](./07-build-tooling.md#33-oxlintの設定強化)
+
+---
+
+## 35. フロントエンドの自動テスト：壊れても気づけない場所を守る
+
+Vitest + React Testing Library を導入し、`useApi`・`useMutation`・`useDebouncedValue`・`CardCreateForm` に30件のテストを追加しました。Viteの設定を共有できるVitestの利点、`renderHook`によるフック単体の観察、偽のタイマーで時間を進める方法、モックの境界を`api/client`に置く判断、要素をクラス名ではなく「ユーザーに見える形」で探す理由を扱います。あわせて、**わざと実装を壊したところ`useDebouncedValue`のテストだけが不十分で通ってしまった**実例と、観察するタイミングを変えて修正した経緯も記録しています。
+
+📄 詳細：[13-frontend-testing.md](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 
 ---
 

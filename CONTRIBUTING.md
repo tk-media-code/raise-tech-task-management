@@ -135,8 +135,8 @@ bash scripts/quality-check.sh --frontend
 
 | 対象 | 内容 |
 | --- | --- |
-| backend | `./gradlew check`（コンパイル + Checkstyle + SpotBugs + 既存のスモークテスト） |
-| frontend | `npx oxlint`（Lint）+ `npm run build`（`tsc -b`による型チェック + Viteビルド） |
+| backend | `./gradlew check`（コンパイル + Checkstyle + SpotBugs + テスト） |
+| frontend | `npx oxlint`（Lint）+ `npm run build`（`tsc -b`による型チェック + Viteビルド）+ `npm test`（Vitest） |
 
 いずれもDockerコンテナ内で実行されます（`docker compose up -d`で起動しておく必要があります）。
 
