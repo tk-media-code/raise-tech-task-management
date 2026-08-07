@@ -182,13 +182,16 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
           後者まで labels.length > 0 の条件に含めてしまうと、まだラベルが1つも無いボードで
           最初のラベルを作る入り口自体が無くなってしまうため。 */}
       {labels.length > 0 && (
-        <div className="flex flex-wrap gap-1">
+        // gap をやや広めに取るのは、× がチップ右上へはみ出すぶん、隣のチップと重ならないようにするため。
+        <div className="flex flex-wrap gap-x-2.5 gap-y-2 pt-1">
           {labels.map((label) => (
             // LabelToggleChip自体は<button>1個で成り立っており（<button>の入れ子はHTML上
-            // 不可能）、この<div>で削除ボタンと横並びにする。LabelToggleChipはLabelFilterBar.tsx
-            // （検索画面の絞り込みUI）でも使われており、そちらには削除UIを出したくないため、
-            // 変更をLabelToggleChip自体には入れずLabelPicker側に閉じている。
-            <div key={label.id} className="flex items-center gap-0.5">
+            // 不可能）、この relative な枠の上に削除ボタンを絶対配置する。横並びだと「どの
+            // ラベルの×か」が隣のチップと紛らわしいため、チップ右上に重ねて所属を示す。
+            // LabelToggleChipはLabelFilterBar.tsx（検索画面の絞り込みUI）でも使われており、
+            // そちらには削除UIを出したくないため、変更をLabelToggleChip自体には入れず
+            // LabelPicker側に閉じている。
+            <div key={label.id} className="relative">
               <LabelToggleChip
                 label={label}
                 selected={selectedLabelIds.includes(label.id)}
@@ -199,7 +202,9 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
                 onClick={() => handleRequestDelete(label)}
                 aria-label={`ラベル「${label.name}」を削除`}
                 title="ラベルを削除"
-                className="cursor-pointer rounded-full px-1 text-xs leading-none text-slate-400 hover:bg-red-50 hover:text-red-600"
+                // -right / -top ではみ出させてチップ右上に乗せる。白地＋細い枠で、塗りつぶし
+                // チップの上でも×が見えるようにする（色付き背景に直接置くとコントラストが落ちる）。
+                className="absolute -right-1.5 -top-1.5 flex h-4 w-4 cursor-pointer items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] leading-none text-slate-500 shadow-sm hover:border-red-300 hover:bg-red-50 hover:text-red-600"
               >
                 ×
               </button>

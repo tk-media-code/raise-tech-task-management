@@ -58,7 +58,7 @@ describe('LabelPicker（ラベル削除）', () => {
     })
   })
 
-  it('各ラベルの隣に削除ボタンが表示される', async () => {
+  it('各ラベルの右上に削除ボタンが表示される', async () => {
     render(<LabelPicker boardId={1} selectedLabelIds={[]} onChange={vi.fn()} onLabelDeleted={vi.fn()} />)
 
     expect(await screen.findByRole('button', { name: 'ラベル「緊急」を削除' })).toBeInTheDocument()
