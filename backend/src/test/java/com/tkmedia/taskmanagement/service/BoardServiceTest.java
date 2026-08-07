@@ -198,4 +198,46 @@ class BoardServiceTest {
 					.hasMessageContaining("999");
 		}
 	}
+
+	@Nested
+	@DisplayName("deleteLabel（ラベル削除）")
+	class DeleteLabel {
+
+		@Test
+		@DisplayName("存在するラベルを削除できる")
+		void 存在するラベルは削除できる() {
+			when(labelRepository.existsByBoardIdAndId(1, 10)).thenReturn(true);
+
+			boardService.deleteLabel(1, 10);
+
+			verify(labelRepository).deleteById(10);
+		}
+
+		@Test
+		@DisplayName("存在しないラベルIDを指定すると404相当の例外になる")
+		void 存在しないラベルは404() {
+			when(labelRepository.existsByBoardIdAndId(1, 999)).thenReturn(false);
+
+			assertThatThrownBy(() -> boardService.deleteLabel(1, 999))
+					.isInstanceOf(ResourceNotFoundException.class)
+					.hasMessageContaining("999");
+
+			verify(labelRepository, never()).deleteById(any());
+		}
+
+		@Test
+		@DisplayName("他ボードのラベルIDを指定すると404相当の例外になる")
+		void 他ボードのラベルは404() {
+			// ラベル10が実際にはボード1に属していても、ボード2に対して削除しようとした場合、
+			// existsByBoardIdAndIdはboardIdとlabelIdの組で判定するためfalseが返る想定。
+			when(labelRepository.existsByBoardIdAndId(2, 10)).thenReturn(false);
+
+			assertThatThrownBy(() -> boardService.deleteLabel(2, 10))
+					.isInstanceOf(ResourceNotFoundException.class);
+
+			// existsByBoardIdAndIdに正しいboardId（2）が渡っていることを明示的に検証する。
+			verify(labelRepository).existsByBoardIdAndId(2, 10);
+			verify(labelRepository, never()).deleteById(any());
+		}
+	}
 }

@@ -415,7 +415,15 @@ function CardDetailModal({ cardId, onUpdated, onClose }: Props) {
                 <div>
                   <p className="text-xs font-semibold text-slate-500">ラベル</p>
                   <div className="mt-1">
-                    <LabelPicker boardId={card.boardId} selectedLabelIds={labelIds} onChange={setLabelIds} />
+                    {/* onLabelDeletedにonUpdatedをそのまま渡す。CardCreateForm.tsxと同じく、
+                        ラベル削除の反映も「呼び出し元の一覧を再取得してもらう」という
+                        既存のonUpdatedの役割に相乗りさせている。 */}
+                    <LabelPicker
+                      boardId={card.boardId}
+                      selectedLabelIds={labelIds}
+                      onChange={setLabelIds}
+                      onLabelDeleted={onUpdated}
+                    />
                   </div>
                 </div>
 

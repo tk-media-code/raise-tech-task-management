@@ -2,7 +2,7 @@
 
 [← React学習ドキュメントトップへ戻る](./README.md)
 
-> 元の学習ドキュメントにおける **31〜32章** をまとめています。
+> 元の学習ドキュメントにおける **31〜32章、37章** をまとめています。
 
 ---
 
@@ -90,6 +90,72 @@ onDeleted()
 [19章](./08-form-and-mutation.md#19-書き込みpostとデータの更新)で述べた「一覧の中身を決める権限はサーバー側にある」という方針をここでも踏襲し、`onDeleted`（= `refetch`）でサーバーへ取りに行き直しています。この一覧の中身は、サーバー側の絞り込み条件（`archived=true`）によって決まっており、削除成功後にクライアント側が「消えたはずの行」を自分で取り除く処理を書くことは、この絞り込み条件をフロントエンドにもう一度実装し直すことに等しくなります。唯一の例外はドラッグ＆ドロップ（[25章](./09-editing-and-drag-and-drop.md#25-ドラッグドロップだけの楽観的更新)）で、そちらは「ドロップした瞬間に動いた実感が無いと使い物にならない」という体験上の要請が、この方針を上回るだけの理由になっていました。カードの完全削除にそのような瞬時性は求められていない（確認ダイアログを経由する時点で、既に一呼吸置かれた操作になっている）ため、原則どおりサーバーからの取り直しに委ねています。
 
 📄 実装：`frontend/src/components/ArchivedCardItem.tsx`、`frontend/src/pages/ArchiveView.tsx`
+
+---
+
+## 37. 3つ目の削除機能——確認手段をあえて`window.confirm`にしない
+
+ラベル削除（要件定義5.5）は、本プロジェクトで3つ目の削除機能です。件数取得のロジックは[30章](./10-board-management.md#30-削除とkeyによる再マウント)のボード削除からそのまま転用できますが、確認手段だけは30章・31章のどちらとも異なる選択をしています。
+
+### 件数取得ロジックの転用——`countCardsForDeleteConfirm`と同じ形
+
+```tsx
+async function countCardsForLabel(labelId: number): Promise<number | null> {
+  try {
+    const controller = new AbortController()
+    const [active, archived] = await Promise.all([
+      fetchJson<CardResponse[]>(apiPaths.cards({ boardId, labelIds: [labelId], archived: false }), controller.signal),
+      fetchJson<CardResponse[]>(apiPaths.cards({ boardId, labelIds: [labelId], archived: true }), controller.signal),
+    ])
+    return active.length + archived.length
+  } catch {
+    return null
+  }
+}
+```
+
+[30章](./10-board-management.md#30-削除とkeyによる再マウント)の`countCardsForDeleteConfirm`（ボード削除）と、`archived: false`・`archived: true`の2本を`Promise.all`で並行取得して合算する、失敗時は`null`を返し削除フロー自体は止めない、という骨格がそのまま一致します。違いは`apiPaths.cards()`に渡す絞り込み条件だけです（ボード削除は`{ boardId }`のみ、ラベル削除は`{ boardId, labelIds: [labelId] }`を加えて「このラベルが付いたカードだけ」に絞る）。`GET /api/cards`が`labelIds`によるOR条件の絞り込みを既に持っていた（検索画面・要件5.8向けに実装済み）ため、バックエンドに新しいAPIを1本も足さずに済んでいます。「必要な絞り込みが可能な汎用GETが既にあるなら、削除確認のためだけに専用のカウントAPIを新設しない」という判断です。
+
+### なぜ`window.confirm`ではないのか
+
+[30章](./10-board-management.md#30-削除とkeyによる再マウント)・[31章](#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)はどちらも`window.confirm()`を選び、「開閉状態の管理やフォーカストラップの作り込みが一切不要になる」ことを理由に挙げていました。ラベル削除ではこの前例をあえて踏襲せず、`LabelPicker`内にその場で確認パネルを展開する、独自のインラインUIを使っています。
+
+```tsx
+{deleteTarget !== null && (
+  <div className="flex flex-col gap-2 rounded border border-red-200 bg-red-50 p-2 text-xs">
+    <p>「{deleteTarget.name}」を削除しますか？ ...</p>
+    <div className="flex gap-2">
+      <button type="button" onClick={handleConfirmDelete} disabled={deletingLabel}>...</button>
+      <button type="button" onClick={handleCancelDelete}>...</button>
+    </div>
+  </div>
+)}
+```
+
+理由は技術的な制約ではなく、`LabelPicker`が置かれる文脈にあります。`LabelPicker`は`CardCreateForm`（`<form>`の中）と`CardDetailModal`（[34章](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)で見た、`showModal()`で開く`<dialog>`の中）の両方から使われます。`window.confirm()`はブラウザのネイティブダイアログなので、`<dialog>`の中から呼んでも問題なく動作しますが、もし`window.confirm()`の代わりに34章と同じ「ネイティブ`<dialog>` + `showModal()`」で確認用のカスタムモーダルを作っていたら、`CardDetailModal`から使う場合に「`<dialog>`の中からさらに`<dialog>`を開く」という、本プロジェクトにまだ無い入れ子構成を持ち込むことになっていました（HTML標準としては複数の`<dialog>`が同時にトップレイヤーへ積まれること自体は許容されており技術的には動きますが、確かめる価値のある複雑さが一つ増えます）。
+
+「影響件数を確認前に表示したい」という要件を満たす手段として、①`window.confirm()`のまま件数を含めた文字列を事前生成する（30章と同じ）、②ネイティブ`<dialog>`によるカスタムモーダル（34章と同じ手法をもう1つ増やす）、③このコンポーネント自身のstateで開閉する素の`<div>`（新しい仕組みを増やさない）という3案のうち、③を選んでいます。`window.confirm()`は`OK`/`キャンセル`の2択とメッセージ文字列しか表現できず、「件数を確認中は取得中である旨を示しつつボタンは押せる」といった段階的な表示ができません。カスタム`<dialog>`は表現力では③と同等ですが、入れ子の複雑さを増やすだけの見返りが無いと判断しました。
+
+### `deleteTarget`という「どのラベルの確認パネルを開いているか」を表すstate
+
+```tsx
+const [deleteTarget, setDeleteTarget] = useState<LabelResponse | null>(null)
+const [pendingCardCount, setPendingCardCount] = useState<number | null>(null)
+```
+
+[29章](./10-board-management.md#29-インライン改名編集とescapeの競合)の`renamingBoardId`（「どの行が改名編集中か」を親が1つのstateで持つ）と同じ考え方です。ラベルは複数並んでおり、確認パネルを同時に開けるのは1つだけでよいため、「開いている／いない」の`boolean`ではなく「どのラベルの確認中か（`null`なら誰も確認中でない）」という値を持たせています。`pendingCardCount`を`deleteTarget`とは別のstateに分けているのは、「対象は決まったが件数はまだ取得中」という中間状態（`countCardsForLabel`が非同期のため必ず一瞬発生する）を表現するためで、[11章](./04-custom-hooks.md#11-データ取得の3状態とレースコンディション)の「読み込み中とデータなしを区別する」という考え方の小さな再現でもあります。
+
+### 削除後、選択中のラベルからも外す
+
+```tsx
+if (selectedLabelIds.includes(deletedId)) {
+  onChange(selectedLabelIds.filter((id) => id !== deletedId))
+}
+```
+
+`LabelPicker`は[21章](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)で見たとおり「controlled」コンポーネントで、選択状態（`selectedLabelIds`）は呼び出し元が持っています。削除したラベルがちょうど選択済みだった場合にこれを行わないと、送信時にバックエンドの`labelIds`検証（[docs/spring-boot 32章](../spring-boot/09-write-api-validation.md#32-アプリケーション層での重複許可値チェック)の考え方の延長）に弾かれてしまいます。作成時にラベルを自動選択する（[21章](./08-form-and-mutation.md#21-フォームの中でネストした作成を行う)）のとちょうど逆方向の、対称的な後始末です。
+
+📄 実装：`frontend/src/components/LabelPicker.tsx`
 
 ---
 

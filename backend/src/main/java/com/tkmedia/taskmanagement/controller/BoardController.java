@@ -149,4 +149,20 @@ public class BoardController {
 		// Locationは代わりに一覧取得エンドポイント（listLabelsと同じURL）を指す。
 		return ResponseEntity.created(URI.create("/api/boards/" + id + "/labels")).body(created);
 	}
+
+	/**
+	 * 指定ボードのラベルを削除する（物理削除）。
+	 *
+	 * @param id      ボードID
+	 * @param labelId 削除対象のラベルID。指定ボードに属さないIDの場合は404
+	 */
+	// delete（ボード削除）と同じ理由でvoid + @ResponseStatus(HttpStatus.NO_CONTENT)にする。
+	// 使用中（カードに付与済み）のラベルも削除できる。付与されていた全カードとの結び付き
+	// （card_labelの行）も、DB側のON DELETE CASCADEにより連動して削除される
+	// （BoardService.deleteLabelのコメント参照）。
+	@DeleteMapping("/{id}/labels/{labelId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void deleteLabel(@PathVariable Integer id, @PathVariable Integer labelId) {
+		boardService.deleteLabel(id, labelId);
+	}
 }

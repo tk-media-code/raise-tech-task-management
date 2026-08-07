@@ -32,6 +32,7 @@
 | 34章 | ネイティブ`<dialog>`とモーダルのアクセシビリティ | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 | 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
 | 36章 | ARIAタブパターンによるモバイル向けステータス切り替え | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
+| 37章 | ラベル削除（3つ目の削除機能、確認手段の選択） | [11-card-deletion.md](./11-card-deletion.md) |
 
 ## 目次
 
@@ -71,6 +72,7 @@
 34. [ネイティブ`<dialog>`とモーダルのアクセシビリティ](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)
 35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 36. [ARIAタブパターンによるモバイル向けステータス切り替え](./12-dialog-accessibility.md#36-ariaタブパターンによるモバイル向けステータス切り替え)
+37. [3つ目の削除機能——確認手段をあえて`window.confirm`にしない](./11-card-deletion.md#37-3つ目の削除機能確認手段をあえてwindowconfirmにしない)
 
 ---
 
@@ -351,6 +353,14 @@
 Vitest + React Testing Library を導入し、`useApi`・`useMutation`・`useDebouncedValue`・`CardCreateForm` に30件のテストを追加しました。Viteの設定を共有できるVitestの利点、`renderHook`によるフック単体の観察、偽のタイマーで時間を進める方法、モックの境界を`api/client`に置く判断、要素をクラス名ではなく「ユーザーに見える形」で探す理由を扱います。あわせて、**わざと実装を壊したところ`useDebouncedValue`のテストだけが不十分で通ってしまった**実例と、観察するタイミングを変えて修正した経緯も記録しています。
 
 📄 詳細：[13-frontend-testing.md](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
+
+---
+
+## 37. 3つ目の削除機能——確認手段をあえて`window.confirm`にしない
+
+ラベル削除（要件定義5.5）を教材に、件数取得ロジック（[30章](./10-board-management.md#30-削除とkeyによる再マウント)の`countCardsForDeleteConfirm`と同じ骨格）をそのまま転用できる一方、確認手段だけは`window.confirm`にも新規のネイティブ`<dialog>`にもせず、`LabelPicker`自身のstateで開閉するインラインパネルを選んだ理由を解説します。`CardDetailModal`（既に`<dialog>`で開いている画面）から使われる文脈が、`<dialog>`の入れ子という複雑さを避ける決め手になったことを扱います。
+
+📄 詳細：[11-card-deletion.md](./11-card-deletion.md#37-3つ目の削除機能確認手段をあえてwindowconfirmにしない)
 
 ---
 

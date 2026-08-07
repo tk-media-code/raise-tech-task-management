@@ -52,4 +52,18 @@ public interface LabelRepository extends JpaRepository<Label, Integer> {
 	// 機械的に変換される。count(*) > 0 相当のSQLになるため、findByBoardIdAndIdInのように
 	// 一覧を取得してJava側でsizeを比較するより、DBに存在確認だけを行わせる分軽量になる。
 	boolean existsByBoardIdAndName(Integer boardId, String name);
+
+	/**
+	 * 指定したボードに、指定したIDのラベルが存在するかを判定する。
+	 * ラベル削除時、削除対象が「実在するか」だけでなく「本当にそのボードに属するラベルか」まで
+	 * 確認するために使う（他ボードのラベルIDを紛れ込ませたリクエストを弾くのが目的で、
+	 * findByBoardIdAndIdInが持つ意図と同じ）。
+	 *
+	 * @param boardId 絞り込み対象のボードID
+	 * @param id      存在確認したいラベルのID（Labelの@Idフィールド）
+	 * @return 該当するボードに、そのIDのラベルが存在すればtrue
+	 */
+	// BoardIdはLabel.board（@ManyToOne）を辿ってboard_id列を、Idは Label 自身の@Idフィールドを
+	// 指す。existsByBoardIdAndNameと同じ「count(*) > 0相当」の軽量な存在確認になる。
+	boolean existsByBoardIdAndId(Integer boardId, Integer id);
 }
