@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router'
+import { NavLink, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router'
 import { apiPaths } from './api/client'
 import BoardManageModal from './components/BoardManageModal'
 import BoardSelect from './components/BoardSelect'
@@ -11,6 +11,20 @@ import BoardDetailView from './pages/BoardDetailView'
 import NotFoundView from './pages/NotFoundView'
 import SearchView from './pages/SearchView'
 import type { BoardResponse } from './types/api'
+
+/**
+ * ヘッダーのサブ画面導線（タスク検索・アーカイブ）用クラス。
+ * 現在の URL と一致するときアクティブ見た目にし、サブ画面側の h2 タイトルを置かなくても
+ * どの画面か分かるようにする（MobileStatusTabs の選択中タブと同系統の塗り）。
+ */
+function headerNavLinkClass(isActive: boolean) {
+  return [
+    'cursor-pointer rounded border px-2 py-1 text-sm transition',
+    isActive
+      ? 'border-blue-600 bg-blue-600 text-white hover:bg-blue-700'
+      : 'border-slate-300 hover:bg-slate-50',
+  ].join(' ')
+}
 
 /**
  * アプリ全体の共通レイアウトとルーティング定義。
@@ -115,22 +129,17 @@ function App() {
               ボード管理
             </button>
             {/* タスク検索（要件5.8）。横断ビュー・ボード詳細のどちらからでも開ける独立画面のため、
-                BoardSelectと同じくヘッダー（<Routes>の外側）に置く。 */}
-            <Link
-              to="/search"
-              className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
-            >
+                BoardSelectと同じくヘッダー（<Routes>の外側）に置く。
+                NavLink で現在画面をアクティブ表示し、SearchView 側の h2 は置かない。 */}
+            <NavLink to="/search" className={({ isActive }) => headerNavLinkClass(isActive)}>
               タスク検索
-            </Link>
+            </NavLink>
             {/* アーカイブ（要件5.7）。ワイヤーフレーム6.2では①ボード詳細・③横断ビューの
                 両方から開ける導線として描かれているが、タスク検索と同じ理由でヘッダー
                 （<Routes>の外側）に1つ置けば両画面から開けるため、個別に配置し直さない。 */}
-            <Link
-              to="/archive"
-              className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-sm hover:bg-slate-50"
-            >
+            <NavLink to="/archive" className={({ isActive }) => headerNavLinkClass(isActive)}>
               アーカイブ
-            </Link>
+            </NavLink>
           </div>
         </div>
       </header>

@@ -138,7 +138,8 @@ function BoardDetailView() {
 
   return (
     <section>
-      <h2 className="mb-4 text-lg font-semibold">ボード詳細</h2>
+      {/* 画面上部の「ボード詳細」見出しは、ヘッダーのボード選択で現在のボードが分かるため置かない
+          （CrossBoardView.tsx の横断ビュー見出し削除と同じ考え方）。 */}
       {renderContent()}
       {dragAndDrop.error !== null && (
         <StatusMessage kind="error">カードの移動に失敗しました：{dragAndDrop.error.message}</StatusMessage>

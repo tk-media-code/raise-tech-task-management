@@ -121,7 +121,8 @@ function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
         )}
       </button>
 
-      {/* 「移動」メニュー（要件5.3、ワイヤーフレーム6.2①の[移動 ▾]）。
+      {/* ステータス変更メニュー（要件5.3、ワイヤーフレーム6.2①）。プレースホルダーは
+          「移動 ▾」より意図が伝わる「ステータスを変更する」とする。
           カスタムのドロップダウンではなくネイティブの<select>を使うのは、開閉状態・
           外側クリックでの閉じる処理・キーボード操作といった作り込みが一切不要になるうえ、
           スマートフォン・タブレットでもOS標準のピッカーUIで操作でき、要件が挙げる
@@ -136,11 +137,11 @@ function CardItem({ card, onSelect, onMoved, showDropLine }: Props) {
         value=""
         onChange={handleMove}
         disabled={submitting}
-        aria-label={`「${card.title}」の移動先`}
+        aria-label={`「${card.title}」のステータスを変更`}
         className="mt-2 w-full cursor-pointer rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-500 disabled:cursor-not-allowed disabled:opacity-50 md:hidden"
       >
         <option value="" disabled>
-          移動 ▾
+          ステータスを変更する
         </option>
         {destinations.map((status) => (
           <option key={status} value={status}>
