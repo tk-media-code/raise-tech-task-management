@@ -188,7 +188,7 @@ run_check "frontend (npm test)"      "docker exec ... npm test"
 
 ### 残っている課題
 
-- **`CardDetailModal`のテストが無い**：このプロジェクトで最も複雑なコンポーネント（下書きと保存の分離、PUT→PATCHの連鎖）ですが、[34章](./12-dialog-accessibility.md#34-ネイティブdialogとモーダルのアクセシビリティ)でネイティブ`<dialog>`へ移行した関係で、jsdomが`showModal()`を実装していないという壁があります。テスト側でこのメソッドを補う必要があり、別途対応します
+- **`CardDetailModal`のテストが無い**：このプロジェクトで最も複雑なコンポーネント（下書きと保存の分離、PUT→PATCHの連鎖）ですが、まだ手が付いていません。かつてここには「jsdomが`showModal()`を実装していないという壁がある」と書いていましたが、[38章](./12-dialog-accessibility.md#38-共通の確認ダイアログwindowconfirmをやめてネイティブdialogに寄せる)で`src/test/setup.ts`に代替実装を置いたため、`<dialog>`を描画するコンポーネントはテストできるようになっています（`ConfirmDialog`・`ArchivedCardItem`・`SortableBoardRow`が実例）。ただしその代替で再現できるのは開閉だけで、トップレイヤー・フォーカストラップ・背景の不活性化・Escapeによる`cancel`イベント・`::backdrop`はブラウザでの手動確認に委ねる、という線引きは残ります
 - **E2Eテストは無い**：ドラッグ＆ドロップ（[23〜28章](./09-editing-and-drag-and-drop.md)）のように、複数の要素の位置関係とポインタ操作が絡む機能は、jsdomでは十分に再現できません。実機に近い環境で動かすPlaywright等の導入が必要な領域です
 - **CIには組み込んでいない**：backendと同じく、テストの実行はpush前のローカルチェックに委ねています
 

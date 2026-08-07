@@ -33,6 +33,7 @@
 | 35章 | フロントエンドの自動テスト（Vitest・Testing Library） | [13-frontend-testing.md](./13-frontend-testing.md) |
 | 36章 | ARIAタブパターンによるモバイル向けステータス切り替え | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 | 37章 | ラベル削除（3つ目の削除機能、確認手段の選択） | [11-card-deletion.md](./11-card-deletion.md) |
+| 38章 | 共通の確認ダイアログと`<dialog>`の入れ子 | [12-dialog-accessibility.md](./12-dialog-accessibility.md) |
 
 ## 目次
 
@@ -73,6 +74,7 @@
 35. [フロントエンドの自動テスト：壊れても気づけない場所を守る](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)
 36. [ARIAタブパターンによるモバイル向けステータス切り替え](./12-dialog-accessibility.md#36-ariaタブパターンによるモバイル向けステータス切り替え)
 37. [3つ目の削除機能——確認手段をあえて`window.confirm`にしない](./11-card-deletion.md#37-3つ目の削除機能確認手段をあえてwindowconfirmにしない)
+38. [共通の確認ダイアログ——`window.confirm`をやめてネイティブ`<dialog>`に寄せる](./12-dialog-accessibility.md#38-共通の確認ダイアログwindowconfirmをやめてネイティブdialogに寄せる)
 
 ---
 
@@ -358,9 +360,17 @@ Vitest + React Testing Library を導入し、`useApi`・`useMutation`・`useDeb
 
 ## 37. 3つ目の削除機能——確認手段をあえて`window.confirm`にしない
 
-ラベル削除（要件定義5.5）を教材に、件数取得ロジック（[30章](./10-board-management.md#30-削除とkeyによる再マウント)の`countCardsForDeleteConfirm`と同じ骨格）をそのまま転用できる一方、確認手段だけは`window.confirm`にも新規のネイティブ`<dialog>`にもせず、`LabelPicker`自身のstateで開閉するインラインパネルを選んだ理由を解説します。`CardDetailModal`（既に`<dialog>`で開いている画面）から使われる文脈が、`<dialog>`の入れ子という複雑さを避ける決め手になったことを扱います。
+ラベル削除（要件定義5.5）を教材に、件数取得ロジック（[30章](./10-board-management.md#30-削除とkeyによる再マウント)の`countCardsForDeleteConfirm`と同じ骨格）をそのまま転用できる一方、確認手段だけは`window.confirm`にも新規のネイティブ`<dialog>`にもせず、`LabelPicker`自身のstateで開閉するインラインパネルを選んだ理由を解説します。`CardDetailModal`（既に`<dialog>`で開いている画面）から使われる文脈が、`<dialog>`の入れ子という複雑さを避ける決め手になったことを扱います。※そのボード削除・カードの完全削除の`window.confirm`は、[38章](#38-共通の確認ダイアログwindowconfirmをやめてネイティブdialogに寄せる)でネイティブ`<dialog>`へ移行しました（`LabelPicker`のインラインパネルはそのまま）。
 
 📄 詳細：[11-card-deletion.md](./11-card-deletion.md#37-3つ目の削除機能確認手段をあえてwindowconfirmにしない)
+
+---
+
+## 38. 共通の確認ダイアログ——`window.confirm`をやめてネイティブ`<dialog>`に寄せる
+
+「削除の確認が出ないまま消えた」という不具合を入り口に、`window.confirm()`がブラウザ側の設定で抑制され得ること——しかも抑制されると即座に`false`を返すため、アプリからは「キャンセルされた」のか「表示されなかった」のかを区別できないこと——を扱います。共通コンポーネント`ConfirmDialog`をどこまでの責務で切るか（本文は`children`で外に出し、`useDelete`は内側に持たない）、そして本プロジェクト初となる`<dialog>`の入れ子で何が起きるか（Reactが非バブリングの`cancel`を祖先へ配り直すため`stopPropagation()`が要る、`::backdrop`の二重掛け、アンマウント時にフォーカス復帰が走らない）を、実測結果とともに解説します。あわせて、jsdomに`showModal()`が無いという[35章](#35-フロントエンドの自動テスト壊れても気づけない場所を守る)の課題を代替実装で解消したことと、その代替では再現できない範囲の線引きも扱います。
+
+📄 詳細：[12-dialog-accessibility.md](./12-dialog-accessibility.md#38-共通の確認ダイアログwindowconfirmをやめてネイティブdialogに寄せる)
 
 ---
 
