@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { getContrastTextColor } from '../lib/color'
 import type { LabelResponse } from '../types/api'
 
@@ -22,6 +23,21 @@ type Props = {
  * `LabelChip`と共通なので`lib/color.ts`から同じ関数を使う。
  */
 function LabelToggleChip({ label, selected, onToggle }: Props) {
+  // ラベル色は実行時値のため Tailwind クラスだけではホバー背景を作れない。
+  // --chip-color を CSS 変数に載せ、color-mix で未選択時のホバー塗りを付ける。
+  const chipStyle = selected
+    ? {
+        backgroundColor: label.color,
+        borderColor: label.color,
+        color: getContrastTextColor(label.color),
+        '--chip-color': label.color,
+      }
+    : {
+        borderColor: label.color,
+        color: label.color,
+        '--chip-color': label.color,
+      }
+
   return (
     <button
       type="button"
@@ -29,14 +45,9 @@ function LabelToggleChip({ label, selected, onToggle }: Props) {
       // aria-pressedは「オン/オフの状態を持つボタン」であることをスクリーンリーダーに伝える
       // 属性。見た目（色）だけで選択状態を表現すると、色を判別できない利用者に伝わらない。
       aria-pressed={selected}
-      style={
-        selected
-          ? // 選択中はLabelChipと同じ配色（背景=ラベル色、文字=コントラスト色）で塗りつぶす。
-            { backgroundColor: label.color, borderColor: label.color, color: getContrastTextColor(label.color) }
-          : // 未選択はラベル色の輪郭だけを見せるアウトライン表示にし、選択中との違いを一目で分かるようにする。
-            { borderColor: label.color, color: label.color }
-      }
-      className="rounded-full border px-2 py-0.5 text-xs font-medium"
+      style={chipStyle as CSSProperties}
+      // 未選択: ラベル色の薄い塗り＋影。選択中: 少し暗く。どちらも cursor-pointer で押せることを示す。
+      className="cursor-pointer rounded-full border px-2 py-0.5 text-xs font-medium transition-all duration-150 hover:shadow-sm aria-pressed-[false]:hover:[background-color:color-mix(in_srgb,var(--chip-color)_14%,white)] aria-pressed-[true]:hover:brightness-95"
     >
       {label.name}
     </button>

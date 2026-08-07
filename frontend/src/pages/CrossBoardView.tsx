@@ -15,7 +15,7 @@ import type { BoardResponse, CardResponse } from '../types/api'
 
 type Props = {
   /**
-   * ヘッダーの⚙ボード管理と同じくApp.tsxが取得済みのボード一覧をそのまま受け取る。
+   * ヘッダーのボード管理と同じくApp.tsxが取得済みのボード一覧をそのまま受け取る。
    * このコンポーネント自身がGET /api/boardsを呼ばないのは、App.tsxのdocblockに
    * 書かれている「ボード一覧のAPIをアプリ起動あたり1回叩くだけで済む」という
    * 設計を崩さないため（二重フェッチを避ける）。未取得・取得失敗のときはnull。
@@ -111,7 +111,7 @@ function CrossBoardView({ boards }: Props) {
                   // カードが0件なのではなく、ボード自体が1つも無い状態
                   // （lib/grouping.tsのgroupCardsByStatusAndBoardはboardsを事前登録するため、
                   // ボードが1つでもあればここには来ない）。
-                  <p className="text-xs text-slate-400">ボードがありません。⚙ から作成してください</p>
+                  <p className="text-xs text-slate-400">ボードがありません。ボード管理から作成してください</p>
                 ) : (
                   boardGroups.map((group) => (
                     // keyはboardId（中身が変わっても揺れないID）を使う。
@@ -157,7 +157,7 @@ function CrossBoardView({ boards }: Props) {
 
   return (
     <section>
-      <h2 className="mb-4 text-lg font-semibold">横断ビュー</h2>
+      {/* 画面上部の「横断ビュー」見出しは、ヘッダーのボード選択で現在画面が分かるため置かない。 */}
       {renderContent()}
       {dragAndDrop.error !== null && (
         <StatusMessage kind="error">カードの移動に失敗しました：{dragAndDrop.error.message}</StatusMessage>

@@ -135,7 +135,7 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
               onClick={handleCreateLabel}
               // 要件5.2と同じ「未入力なら押せない」考え方をラベル名にも適用する。
               disabled={newLabelName.trim() === '' || creatingLabel}
-              className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
+              className="cursor-pointer rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500"
             >
               {creatingLabel ? '作成中…' : '作成'}
             </button>
@@ -146,7 +146,7 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
                 setNewLabelName('')
                 setNewLabelColor(LABEL_COLORS[0].hex)
               }}
-              className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              className="cursor-pointer rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
             >
               キャンセル
             </button>
@@ -159,7 +159,7 @@ function LabelPicker({ boardId, selectedLabelIds, onChange }: Props) {
         <button
           type="button"
           onClick={() => setLabelCreatorOpen(true)}
-          className="self-start text-xs text-blue-600 hover:underline"
+          className="cursor-pointer self-start text-xs text-blue-600 hover:underline"
         >
           ＋ 新しいラベルを作成
         </button>

@@ -69,46 +69,53 @@ function ArchivedCardItem({ card, onSelect, onRestored, onDeleted }: Props) {
 
   return (
     <div className="w-full rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <button type="button" onClick={() => onSelect(card.id)} className="block w-full text-left">
-        <p className="text-sm font-medium text-slate-800">{card.title}</p>
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          {/* 元のボード・ステータスを明示する（SearchResultItem.tsxと同じ理由：この画面には
-              「どの列を見ているか」という前後関係が無いため、行の中に文脈を書く必要がある）。
-              ワイヤーフレーム6.2⑥の「元: 仕事」表記に合わせ、ステータスも併記する。 */}
-          <span>
-            元: {card.boardName} / {STATUS_LABELS[card.status]}
-          </span>
-          {card.dueDate !== null && <DueDateBadge dueDate={card.dueDate} />}
-          {card.labels.map((label) => (
-            <LabelChip key={label.id} label={label} />
-          ))}
-        </div>
-      </button>
+      {/* タイトル・メタ情報と操作ボタンを横並びにし、ボタン行で高さが増えないようにする */}
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => onSelect(card.id)}
+          className="min-w-0 flex-1 cursor-pointer text-left"
+        >
+          <p className="text-sm font-medium text-slate-800">{card.title}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            {/* 元のボード・ステータスを明示する（SearchResultItem.tsxと同じ理由：この画面には
+                「どの列を見ているか」という前後関係が無いため、行の中に文脈を書く必要がある）。
+                ワイヤーフレーム6.2⑥の「元: 仕事」表記に合わせ、ステータスも併記する。 */}
+            <span>
+              元: {card.boardName} / {STATUS_LABELS[card.status]}
+            </span>
+            {card.dueDate !== null && <DueDateBadge dueDate={card.dueDate} />}
+            {card.labels.map((label) => (
+              <LabelChip key={label.id} label={label} />
+            ))}
+          </div>
+        </button>
 
-      <div className="mt-2 flex items-center justify-end gap-2">
-        {/* ワイヤーフレーム6.2⑥の並び[復元][完全削除]に合わせる。取り消せる操作（復元）を左、
-            取り消せない操作（完全削除）を右に置く配置は、SortableBoardRow.tsxの改名・削除の
-            並びとも揃っている。 */}
-        <button
-          type="button"
-          onClick={handleRestore}
-          // 復元中だけでなく削除中も無効化する。どちらの操作でもこの行は一覧から消えるため、
-          // 両方を同時に走らせても後から届いたほうが必ず404になるだけ（二重送信防止と同じ考え方）。
-          disabled={restoring || deleting}
-          className="rounded border border-blue-300 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {restoring ? '復元中…' : '復元'}
-        </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting || restoring}
-          // 取り消せない操作であることが見た目でも分かるよう、SortableBoardRow.tsxの「削除」
-          // ボタンと同じ赤系の配色にする。
-          className="rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
-        >
-          {deleting ? '削除中…' : '完全削除'}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* ワイヤーフレーム6.2⑥の並び[復元][完全削除]に合わせる。取り消せる操作（復元）を左、
+              取り消せない操作（完全削除）を右に置く配置は、SortableBoardRow.tsxの改名・削除の
+              並びとも揃っている。 */}
+          <button
+            type="button"
+            onClick={handleRestore}
+            // 復元中だけでなく削除中も無効化する。どちらの操作でもこの行は一覧から消えるため、
+            // 両方を同時に走らせても後から届いたほうが必ず404になるだけ（二重送信防止と同じ考え方）。
+            disabled={restoring || deleting}
+            className="cursor-pointer rounded border border-blue-300 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {restoring ? '復元中…' : '復元'}
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting || restoring}
+            // 取り消せない操作であることが見た目でも分かるよう、SortableBoardRow.tsxの「削除」
+            // ボタンと同じ赤系の配色にする。
+            className="cursor-pointer rounded border border-red-300 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-400"
+          >
+            {deleting ? '削除中…' : '完全削除'}
+          </button>
+        </div>
       </div>
       {restoreError !== null && <StatusMessage kind="error">{restoreError.message}</StatusMessage>}
       {deleteError !== null && <StatusMessage kind="error">{deleteError.message}</StatusMessage>}

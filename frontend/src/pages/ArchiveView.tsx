@@ -1,15 +1,16 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router'
+import { useNavigate } from 'react-router'
 import { apiPaths } from '../api/client'
 import ArchivedCardItem from '../components/ArchivedCardItem'
 import CardDetailModal from '../components/CardDetailModal'
 import StatusMessage from '../components/StatusMessage'
+import SubpageHeader from '../components/SubpageHeader'
 import { useApi } from '../hooks/useApi'
 import type { CardResponse } from '../types/api'
 
-/** App.tsxの<Link to="/archive" state={...}>から渡される、遷移元のパス情報（pages/SearchView.tsxと同じ形） */
-type ArchiveLocationState = {
-  from?: string
+type Props = {
+  /** ヘッダーで選択中のボードに対応する一覧画面へのパス（App.tsx から渡される） */
+  boardListPath: string
 }
 
 /**
@@ -22,18 +23,11 @@ type ArchiveLocationState = {
  * より「元はどのボードのものか」であり、各行にそれを明示すれば足りるため
  * （components/ArchivedCardItem.tsx参照）。
  *
- * 「← 戻る」もSearchView.tsxと同じ仕組み：開く直前の画面のパスをLinkのstateとして
- * 受け取り、そこへnavigateする。この画面は検索画面と違い、開いている間に自分自身の
- * URL（クエリパラメータ等）が変化することは無いため、SearchView.tsxのような
- * 「マウント時の1回だけ読み取ってローカルstateに固定する」工夫は不要で、
- * location.stateから毎回そのまま導出するだけで足りる。
+ * 「← 戻る」は、ヘッダーのボード選択（App.tsx が保持）に対応する一覧画面
+ * （横断ビューまたはボード詳細）へ戻る。
  */
-function ArchiveView() {
+function ArchiveView({ boardListPath }: Props) {
   const navigate = useNavigate()
-  const location = useLocation()
-  // state自体が無い（例：URLを直接開いた／リロードした）場合は、アプリの入口である
-  // 横断ビューへ戻す（SearchView.tsxのfromPathと同じフォールバック）。
-  const fromPath = (location.state as ArchiveLocationState | null)?.from ?? '/'
 
   const { data: cards, loading, error, refetch } = useApi<CardResponse[]>(
     apiPaths.cards({ archived: true }),
@@ -71,16 +65,7 @@ function ArchiveView() {
 
   return (
     <section>
-      <div className="mb-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(fromPath)}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          ← 戻る
-        </button>
-        <h2 className="text-lg font-semibold">📥 アーカイブ</h2>
-      </div>
+      <SubpageHeader title="アーカイブ" onBack={() => navigate(boardListPath)} />
 
       {renderContent()}
 

@@ -30,13 +30,13 @@ function ColorSwatchPicker({ selectedColor, onSelect }: Props) {
           aria-label={`ラベルの色: ${color.name}`}
           title={color.name}
           style={{ backgroundColor: color.hex }}
-          className={
+          className={`cursor-pointer ${
             // 選択中は太めの縁取りで視覚的に区別する。未選択は薄い縁（背景色が白に近い黄色などでも
             // 円の輪郭が見えるようにするため）。
             color.hex === selectedColor
               ? 'h-6 w-6 rounded-full ring-2 ring-offset-1 ring-slate-700'
               : 'h-6 w-6 rounded-full border border-slate-300'
-          }
+          }`}
         />
       ))}
     </div>
