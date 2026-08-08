@@ -116,6 +116,50 @@ async function countCardsForLabel(labelId: number): Promise<number | null> {
 
 [30章](./10-board-management.md#30-削除とkeyによる再マウント)の`countCardsForDeleteConfirm`（ボード削除）と、`archived: false`・`archived: true`の2本を`Promise.all`で並行取得して合算する、失敗時は`null`を返し削除フロー自体は止めない、という骨格がそのまま一致します。違いは`apiPaths.cards()`に渡す絞り込み条件だけです（ボード削除は`{ boardId }`のみ、ラベル削除は`{ boardId, labelIds: [labelId] }`を加えて「このラベルが付いたカードだけ」に絞る）。`GET /api/cards`が`labelIds`によるOR条件の絞り込みを既に持っていた（検索画面・要件5.8向けに実装済み）ため、バックエンドに新しいAPIを1本も足さずに済んでいます。「必要な絞り込みが可能な汎用GETが既にあるなら、削除確認のためだけに専用のカウントAPIを新設しない」という判断です。
 
+### 転用したときに紛れ込んだバグ——「取得中」と「取得できなかった」を1つのstateで兼ねない
+
+この件数取得ロジックには、転用の過程で入り込んだバグがありました。**件数の取得に失敗すると、確認パネルが「使用状況を確認しています…」の表示のまま永久に確定しない**というものです。
+
+原因は、2つの異なる意味を1つのstateに載せていたことです。
+
+```tsx
+// 修正前
+const [pendingCardCount, setPendingCardCount] = useState<number | null>(null)
+
+function handleRequestDelete(label: LabelResponse) {
+  setDeleteTarget(label)
+  setPendingCardCount(null)                                // 「取得中」のつもりのnull
+  void countCardsForLabel(label.id).then(setPendingCardCount)
+}
+```
+
+`countCardsForLabel`は取得に失敗すると`catch`で`null`を返します。その`null`がそのまま`setPendingCardCount`へ渡るため、**「まだ取得中」を表すnullと区別が付きません**。表示側は`pendingCardCount === null`を「取得中」と解釈するので、失敗した瞬間から表示が止まります。
+
+```tsx
+{pendingCardCount === null
+  ? ' 使用状況を確認しています…'    // ← 取得に失敗したときもここに落ち、以後変わらない
+  : /* ... */}
+```
+
+これは[11章](./04-custom-hooks.md#11-データ取得の3状態とレースコンディション)で`useApi`が`loading`と`data`を**分けて**持っている理由そのものです。「読み込み中」「データ無し」「取得済み」は3つの別々の状態であり、`null`という1つの値で2つを兼ねようとすると必ずどこかで衝突します。修正はその原則に戻すだけです。
+
+```tsx
+// 修正後：取得中かどうかを独立したstateにする
+const [countingLabelCards, setCountingLabelCards] = useState(false)
+const [pendingCardCount, setPendingCardCount] = useState<number | null>(null)
+
+void countCardsForLabel(label.id).then((count) => {
+  setPendingCardCount(count)
+  setCountingLabelCards(false)   // 成功・失敗のどちらでも必ず降ろす
+})
+```
+
+そのうえで、`null`（取得できなかった）のときの文言を新たに用意しました。件数は言えなくても「削除するとカードからラベルが外れる」という結果自体は変わらないので、それだけを伝えます。ボード削除が件数を数えられなかったときに汎用の文言へフォールバックするのと同じ考え方です。
+
+興味深いのは、**転用元のボード削除には同じバグが無かった**ことです。あちらは`window.confirm()`用の文字列を組み立てる際、`cardCount === null`を「件数不明」として扱い、そもそも「取得中」という表示状態を持っていませんでした（同期APIなので、件数を待ってから確認を出していたためです）。**同じ`number | null`という型でも、`null`が何を意味するかは呼び出し文脈によって違う**——ロジックをコピーするときに型だけを見て安心すると、こういう取りこぼしが起きます。[31章](#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)の「エラー表示は`StatusMessage`」の節で書いた「その実装が選ばれた理由が自分にも当てはまるか確認する」という話と、根は同じです。
+
+なお、このバグは別の作業でボード削除側にも「取得中」の表示を導入することになり、この`LabelPicker`の実装を手本にしようと見比べていて見つかったものです。**動いているコードを手本にするつもりで読んだら、手本の側が壊れていた**わけで、既存実装の転用は「読む」機会そのものに価値がある、という一例でもあります。修正には回帰テストを添え、**テストを書いたら一度わざと壊して、本当に守っているかを確かめる**（[35章](./13-frontend-testing.md#35-フロントエンドの自動テスト壊れても気づけない場所を守る)）という手順も踏んでいます。
+
 ### なぜ`window.confirm`ではないのか
 
 [30章](./10-board-management.md#30-削除とkeyによる再マウント)・[31章](#31-2つ目の削除機能usedeleteとwindowconfirmの再利用)はどちらも`window.confirm()`を選び、「開閉状態の管理やフォーカストラップの作り込みが一切不要になる」ことを理由に挙げていました。ラベル削除ではこの前例をあえて踏襲せず、`LabelPicker`内にその場で確認パネルを展開する、独自のインラインUIを使っています。

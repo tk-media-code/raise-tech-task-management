@@ -77,6 +77,35 @@ describe('LabelPicker（ラベル削除）', () => {
     expect(fetchJsonMock).toHaveBeenCalledWith(expect.stringContaining('archived=true'), expect.anything())
   })
 
+  it('件数の取得に失敗しても「確認しています…」で固まらず、汎用の文言にフォールバックする', async () => {
+    const user = userEvent.setup()
+    deleteRequestMock.mockResolvedValue(undefined)
+    // ラベル一覧の取得は成功させ、件数取得（/api/cards）だけを失敗させる。
+    fetchJsonMock.mockImplementation(async (path: string) => {
+      if (path === '/api/boards/1/labels') return [urgentLabel, importantLabel]
+      throw new Error('件数の取得に失敗しました')
+    })
+    const onLabelDeleted = vi.fn()
+    render(<LabelPicker boardId={1} selectedLabelIds={[]} onChange={vi.fn()} onLabelDeleted={onLabelDeleted} />)
+
+    await user.click(await screen.findByRole('button', { name: 'ラベル「緊急」を削除' }))
+
+    // 取得中と取得失敗を1つのstateで兼ねていた頃は、ここが「確認しています…」のまま確定しなかった。
+    expect(await screen.findByText(/使用状況は確認できませんでした/)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/使用状況を確認しています/)).not.toBeInTheDocument()
+    })
+
+    // 件数が分からないことを理由に削除操作自体はブロックしない、という既存の方針を維持していること。
+    await user.click(screen.getByRole('button', { name: '削除する' }))
+    await waitFor(() => {
+      expect(deleteRequestMock).toHaveBeenCalledWith('/api/boards/1/labels/1')
+    })
+    await waitFor(() => {
+      expect(onLabelDeleted).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('キャンセルすると確認パネルが閉じ、deleteRequestは呼ばれない', async () => {
     const user = userEvent.setup()
     render(<LabelPicker boardId={1} selectedLabelIds={[]} onChange={vi.fn()} onLabelDeleted={vi.fn()} />)
