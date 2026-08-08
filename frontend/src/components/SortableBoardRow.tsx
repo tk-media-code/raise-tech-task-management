@@ -7,6 +7,7 @@ import type { BoardMoveDirection } from '../hooks/useBoardDragAndDrop'
 import { useDelete } from '../hooks/useDelete'
 import { useMutation } from '../hooks/useMutation'
 import type { BoardResponse, BoardUpdateRequest, CardResponse } from '../types/api'
+import ConfirmDialog from './ConfirmDialog'
 
 type Props = {
   board: BoardResponse
@@ -96,6 +97,17 @@ function SortableBoardRow({
   >('PUT', apiPaths.board(board.id))
   const { remove: deleteBoard, submitting: deleting, error: deleteError } = useDelete(apiPaths.board(board.id))
 
+  // 削除の確認ダイアログを開いているか。以前はwindow.confirm()で確認していたが、
+  // ブラウザ側の設定で標準ダイアログが黙って無効化され得ることが分かったため、
+  // アプリ内のダイアログ（components/ConfirmDialog.tsx）へ移した。
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  // 巻き込まれて消えるカードの件数と、その取得中フラグ。
+  // 「取得中」と「取得に失敗した（=null）」は意味が違うため、hooks/useApi.tsのloading/dataと
+  // 同じく2つのstateに分ける。1つのstateで兼ねると、取得に失敗したときに「確認しています…」の
+  // ままメッセージが確定せず、いつまで待てばいいのか分からない表示になる。
+  const [countingCards, setCountingCards] = useState(false)
+  const [cardCount, setCardCount] = useState<number | null>(null)
+
   async function handleSaveRename() {
     const trimmed = draftName.trim()
     if (trimmed === '') return
@@ -140,24 +152,29 @@ function SortableBoardRow({
     }
   }
 
-  async function handleDeleteClick() {
-    const cardCount = await countCardsForDeleteConfirm()
+  function handleDeleteClick() {
+    // 以前は件数の取得をawaitしてからwindow.confirm()を出していたため、ボタンを押してから
+    // 確認が現れるまで2本のGETぶん待たされていた。アプリ内ダイアログなら先に開いておいて
+    // 中身だけ後から差し替えられるので、まず開いてから数え始める
+    // （components/LabelPicker.tsxのhandleRequestDeleteと同じ形）。
+    setConfirmOpen(true)
+    void loadCardCount()
+  }
 
-    // window.confirm()というブラウザ標準のアラートで確認する（要件定義5.1「削除時は所属する
-    // カードも削除される旨を確認する」・プロトタイプconfirmDeleteBoardと同じ文面の方針）。
-    // カスタムモーダルではなく標準アラートを使うのは、削除という取り消せない操作の確認に
-    // ちょうどよい重さで、開閉状態の管理やフォーカストラップの作り込みが一切不要になるため。
-    const lines = [`「${board.name}」を削除します。`]
-    if (cardCount === null) {
-      lines.push('このボードに含まれるカード・ラベルもすべて削除されます。')
-    } else if (cardCount > 0) {
-      lines.push(`このボードに含まれる${cardCount}件のカード（アーカイブ済みを含む）とラベルもすべて削除されます。`)
-    }
-    lines.push('この操作は取り消せません。よろしいですか？')
-    if (!window.confirm(lines.join('\n'))) return
+  /** 確認ダイアログを開くたびに件数を数え直し、メッセージの3状態（取得中／件数／取得失敗）を更新する */
+  async function loadCardCount() {
+    setCountingCards(true)
+    setCardCount(null)
+    setCardCount(await countCardsForDeleteConfirm())
+    setCountingCards(false)
+  }
 
-    const ok = await deleteBoard()
-    if (!ok) return
+  async function handleConfirmDelete() {
+    // removeは失敗時にfalseを返す（例外は投げない。hooks/useDelete.ts参照）。失敗時は
+    // 早期returnしてダイアログを開いたままにする。閉じてしまうとエラーメッセージの
+    // 表示先が無くなるため（components/ArchivedCardItem.tsxと同じ判断）。
+    if (!(await deleteBoard())) return
+    setConfirmOpen(false)
     onDeleted(board.id)
   }
 
@@ -209,7 +226,9 @@ function SortableBoardRow({
             狭い幅に収めたいため（StatusMessageは横幅いっぱいのボックスを想定した見た目のため、
             行単位のインライン表示にはそぐわない）。absolute配置にしない（＝通常のブロックとして
             置く）のは、components/BoardManageModal.tsxの新規作成フォームのエラー表示と同じく、
-            発生時は素直にレイアウトを押し下げる方が、他の行に重なって読めなくなる事故が無いため。 */}
+            発生時は素直にレイアウトを押し下げる方が、他の行に重なって読めなくなる事故が無いため。
+            なお削除のエラーは、以前はここと同じ形で行の直下に出していたが、確認ダイアログの中へ
+            移したことで幅の制約が外れ、StatusMessageに揃えられるようになった（下のConfirmDialog参照）。 */}
         {renameError !== null && (
           <p role="alert" className="mt-1 text-xs text-red-600">
             {renameError.message}
@@ -282,11 +301,41 @@ function SortableBoardRow({
           </button>
         </span>
       </div>
-      {deleteError !== null && (
-        <p role="alert" className="mt-1 text-xs text-red-600">
-          {deleteError.message}
+
+      {/* 削除の確認ダイアログ。このコンポーネントはBoardManageModal（すでにshowModal()で
+          開いている<dialog>）の中で描画されるため、これは<dialog>の入れ子になる。HTML仕様上は
+          正当で、トップレイヤーがスタックしEscapeは最前面のダイアログだけが受け取るが、React側の
+          注意点（cancelイベントが祖先へ配り直される）についてはConfirmDialogのhandleCancel参照。
+
+          削除のエラーはこのダイアログの中に出す。以前は行の直下に<p role="alert">で出しており、
+          モーダル内の狭い1行に収めるためStatusMessageを使わない判断をしていた（上の改名エラーの
+          コメント参照）が、表示先がダイアログの中に移ったことでその幅の制約が外れ、
+          他画面と同じStatusMessageの見た目に揃えられるようになった。 */}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ボードの削除"
+        confirmLabel="削除する"
+        submittingLabel="削除中…"
+        submitting={deleting}
+        error={deleteError}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setConfirmOpen(false)}
+      >
+        {/* aria-live="polite"は、ダイアログを開いた「後で」件数が確定してこの文が書き換わることを
+            支援技術へ伝えるため。開いた時点で要素が存在し、後からテキストだけが差し替わるので
+            ライブリージョンとして機能する。カード完全削除の側は最初から文が確定しているので不要。 */}
+        <p aria-live="polite">
+          「{board.name}」を削除します。
+          {countingCards
+            ? ' 含まれるカードの件数を確認しています…'
+            : cardCount === null
+              ? ' このボードに含まれるカード・ラベルもすべて削除されます。'
+              : cardCount > 0
+                ? ` このボードに含まれる${cardCount}件のカード（アーカイブ済みを含む）とラベルもすべて削除されます。`
+                : ' このボードにカードはありません。'}
         </p>
-      )}
+        <p>この操作は取り消せません。よろしいですか？</p>
+      </ConfirmDialog>
     </li>
   )
 }
