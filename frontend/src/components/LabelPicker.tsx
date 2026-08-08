@@ -53,7 +53,13 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
 
   // 削除確認パネルの対象ラベル。nullなら非表示（＝どの削除ボタンも押されていない状態）。
   const [deleteTarget, setDeleteTarget] = useState<LabelResponse | null>(null)
-  // 対象ラベルが使われているカードの枚数。取得中はnull（確認パネルの「確認しています…」表示に使う）。
+  // 件数を取得中かどうか。件数そのもの（pendingCardCount）と分けて持つ必要がある。
+  // countCardsForLabelは取得に失敗したときもnullを返すため、1つのstateで兼ねると
+  // 「まだ取得中」と「取得できなかった」が区別できず、失敗したときに
+  // 「確認しています…」の表示のまま永久に確定しない（hooks/useApi.tsがloadingとdataを
+  // 分けて持っているのと同じ理由）。
+  const [countingLabelCards, setCountingLabelCards] = useState(false)
+  // 対象ラベルが使われているカードの枚数。取得できなかった場合はnull。
   const [pendingCardCount, setPendingCardCount] = useState<number | null>(null)
 
   // refetchLabelsは、この下のhandleCreateLabelでラベルを新規作成した直後、一覧を取り直すために使う。
@@ -140,12 +146,19 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
 
   function handleRequestDelete(label: LabelResponse) {
     setDeleteTarget(label)
+    setCountingLabelCards(true)
     setPendingCardCount(null)
-    void countCardsForLabel(label.id).then(setPendingCardCount)
+    void countCardsForLabel(label.id).then((count) => {
+      setPendingCardCount(count)
+      // 成功・失敗のどちらでも取得は終わっている。countがnullでも必ずfalseに戻すことで、
+      // 「確認しています…」の表示から抜けられるようにする。
+      setCountingLabelCards(false)
+    })
   }
 
   function handleCancelDelete() {
     setDeleteTarget(null)
+    setCountingLabelCards(false)
     setPendingCardCount(null)
   }
 
@@ -160,6 +173,7 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
 
     const deletedId = deleteTarget.id
     setDeleteTarget(null)
+    setCountingLabelCards(false)
     setPendingCardCount(null)
     refetchLabels()
     // 削除したラベルがこのカード（下書き）で選択済みだった場合、選択からも外す。外さないまま
@@ -220,13 +234,20 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
           同じ「フラグに応じてdiv要素を出し入れする」だけの、よりシンプルな方式に揃えた。 */}
       {deleteTarget !== null && (
         <div className="flex flex-col gap-2 rounded border border-red-200 bg-red-50 p-2 text-xs">
-          <p>
+          {/* aria-live="polite"は、パネルを開いた「後で」件数が確定してこの文が書き換わることを
+              支援技術へ伝えるため。要素は開いた時点から存在し、後からテキストだけが差し替わる。 */}
+          <p aria-live="polite">
             「{deleteTarget.name}」を削除しますか？
-            {pendingCardCount === null
+            {countingLabelCards
               ? ' 使用状況を確認しています…'
-              : pendingCardCount > 0
-                ? ` このラベルは${pendingCardCount}枚のカードで使われています。削除すると、これらのカードから自動的に外れます。`
-                : ' このラベルはどのカードにも使われていません。'}
+              : pendingCardCount === null
+                ? // 件数の取得に失敗したときのフォールバック。件数は言えないが「削除すると
+                  // カードからラベルが外れる」という結果自体は変わらないので、それだけを伝える
+                  // （components/SortableBoardRow.tsxが件数を数えられなかったときと同じ考え方）。
+                  ' 使用状況は確認できませんでしたが、削除すると、このラベルが付いているカードからは自動的に外れます。'
+                : pendingCardCount > 0
+                  ? ` このラベルは${pendingCardCount}枚のカードで使われています。削除すると、これらのカードから自動的に外れます。`
+                  : ' このラベルはどのカードにも使われていません。'}
             この操作は取り消せません。
           </p>
           {deleteLabelError !== null && <StatusMessage kind="error">{deleteLabelError.message}</StatusMessage>}
@@ -234,9 +255,9 @@ function LabelPicker({ boardId, selectedLabelIds, onChange, onLabelDeleted }: Pr
             <button
               type="button"
               onClick={handleConfirmDelete}
-              // 件数取得中（pendingCardCount === null）でもこのボタン自体は非活性にしない。
-              // countCardsForLabelと同じ「件数が分からないことを理由に削除操作をブロックしない」
-              // という判断（SortableBoardRow.tsx参照）。
+              // 件数取得中（countingLabelCards）でも、取得に失敗した後（pendingCardCountがnull）でも、
+              // このボタン自体は非活性にしない。countCardsForLabelと同じ「件数が分からないことを
+              // 理由に削除操作をブロックしない」という判断（SortableBoardRow.tsx参照）。
               disabled={deletingLabel}
               className="cursor-pointer rounded bg-red-600 px-2 py-1 text-xs font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
